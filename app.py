@@ -11,103 +11,277 @@ from ats_scoring import score_resume_against_job
 from resume_optimizer import build_optimized_resume, build_optimized_resume_docx
 
 
-def generate_actionable_steps(breakdown, job_text: str, resume_text: str) -> list[dict]:
-    """Generate prioritized, actionable steps to improve the resume."""
+def _extract_job_phrases(job_text: str) -> dict:
+    """Extract specific phrases and requirements from job description."""
+    import re
+
+    jd_lower = job_text.lower()
+
+    # Extract role title
+    role_patterns = [
+        r'(?:position|role|title):\s*([^\n]{10,60})',
+        r'^([A-Z][^\n]{10,60}(?:engineer|developer|manager|analyst|scientist|designer))',
+    ]
+    role_title = None
+    for pattern in role_patterns:
+        match = re.search(pattern, job_text, re.MULTILINE | re.IGNORECASE)
+        if match:
+            role_title = match.group(1).strip()
+            break
+
+    # Extract years of experience requirements
+    years_match = re.search(r'(\d+)\+?\s+years?\s+(?:of\s+)?(?:experience|exp)', jd_lower)
+    required_years = years_match.group(1) if years_match else None
+
+    # Extract key responsibility phrases (look for bullet points or "you will")
+    responsibilities = []
+    resp_patterns = [
+        r'(?:•|\*|-|\d+\.)\s*([^\n]{20,120})',
+        r'you will\s+([^\n]{20,100})',
+        r'responsible for\s+([^\n]{20,100})',
+    ]
+    for pattern in resp_patterns:
+        matches = re.findall(pattern, jd_lower)
+        responsibilities.extend([m.strip() for m in matches[:5]])
+
+    # Extract required vs preferred qualifications
+    required_section = re.search(r'required(?:\s+qualifications)?:?(.*?)(?:preferred|nice to have|$)', jd_lower, re.DOTALL | re.IGNORECASE)
+    preferred_section = re.search(r'(?:preferred|nice to have|bonus)(?:\s+qualifications)?:?(.*?)(?:$|\n\n)', jd_lower, re.DOTALL | re.IGNORECASE)
+
+    return {
+        'role_title': role_title,
+        'required_years': required_years,
+        'responsibilities': responsibilities[:5],
+        'required_text': required_section.group(1)[:500] if required_section else "",
+        'preferred_text': preferred_section.group(1)[:300] if preferred_section else "",
+    }
+
+
+def _analyze_resume_gaps(job_text: str, resume_text: str, missing_keywords: list, linkedin_text: str = "") -> dict:
+    """Generate specific, actionable changes based on actual content analysis."""
+    import re
+
+    actions = []
+    jd_lower = job_text.lower()
+    cv_lower = resume_text.lower()
+    linkedin_lower = linkedin_text.lower() if linkedin_text else ""
+
+    # Check for specific phrases in JD that should be mirrored
+    key_phrases = []
+
+    # Extract important 2-3 word phrases from JD
+    jd_keywords = re.findall(r'\b(?:[a-z]+ ){1,2}[a-z]+\b', jd_lower)
+    phrase_counts = {}
+    for phrase in jd_keywords:
+        phrase = phrase.strip()
+        if len(phrase) > 8 and phrase not in phrase_counts:
+            phrase_counts[phrase] = jd_lower.count(phrase)
+
+    # Get most frequent phrases not in resume
+    important_phrases = sorted(phrase_counts.items(), key=lambda x: x[1], reverse=True)
+    for phrase, count in important_phrases[:10]:
+        if count >= 2 and phrase not in cv_lower:
+            key_phrases.append(phrase)
+
+    # Check if resume has a summary/objective
+    has_summary = bool(re.search(r'(?:summary|objective|profile|about):', cv_lower))
+
+    # Check for quantified achievements
+    has_metrics = bool(re.search(r'\d+%|\$\d+|\d+\+?\s+(?:users|people|employees|projects)', cv_lower))
+
+    # LinkedIn-specific analysis: find content in LinkedIn but missing from CV
+    linkedin_additions = []
+    if linkedin_lower and len(linkedin_lower) > 100:
+        # Find skills/keywords in LinkedIn that match JD but are missing from CV
+        for keyword in missing_keywords[:15]:
+            if keyword in linkedin_lower and keyword not in cv_lower:
+                # Try to find context in LinkedIn
+                context_match = re.search(rf'([^.!?\n]{0,60}{re.escape(keyword)}[^.!?\n]{0,60})[.!?\n]', linkedin_lower)
+                if context_match:
+                    context = context_match.group(1).strip()[:100]
+                    linkedin_additions.append({
+                        'keyword': keyword,
+                        'context': context
+                    })
+
+        # Check if LinkedIn has metrics that CV lacks
+        linkedin_has_better_metrics = False
+        if not has_metrics:
+            linkedin_metrics = re.findall(r'\d+%|\$[\d,]+|\d+\+?\s+(?:users|people|employees|projects|customers)', linkedin_lower)
+            if len(linkedin_metrics) > 2:
+                linkedin_has_better_metrics = True
+
+    return {
+        'key_phrases': key_phrases[:5],
+        'has_summary': has_summary,
+        'has_metrics': has_metrics,
+        'missing_critical': [k for k in missing_keywords[:8] if k in jd_lower and k not in cv_lower],
+        'linkedin_additions': linkedin_additions[:8],
+        'linkedin_has_metrics': linkedin_has_better_metrics if linkedin_lower else False
+    }
+
+
+def generate_actionable_steps(breakdown, job_text: str, resume_text: str, linkedin_text: str = "") -> list[dict]:
+    """Generate specific, actionable changes based on actual job description and resume analysis."""
     steps = []
 
-    # Priority 1: Critical missing keywords (if skills coverage is low)
-    if breakdown.skills_coverage < 70 and breakdown.missing_keywords:
-        top_missing = breakdown.missing_keywords[:10]
+    # Extract actual content from JD and CV
+    jd_analysis = _extract_job_phrases(job_text)
+    gap_analysis = _analyze_resume_gaps(job_text, resume_text, breakdown.missing_keywords, linkedin_text)
+
+    # CRITICAL: Missing keywords that are in JD requirements
+    if breakdown.skills_coverage < 70 and gap_analysis['missing_critical']:
+        specific_actions = []
+
+        for keyword in gap_analysis['missing_critical'][:5]:
+            # Find context in JD where this keyword appears
+            import re
+            jd_lower = job_text.lower()
+            keyword_context = re.search(rf'([^.!?]*{re.escape(keyword)}[^.!?]*)[.!?]', jd_lower)
+            context_hint = keyword_context.group(1).strip()[:80] if keyword_context else ""
+
+            if context_hint:
+                specific_actions.append(f'**"{keyword}"** - The JD mentions: "{context_hint}..." → Add this to your Skills section and mention it in a relevant project/role')
+            else:
+                specific_actions.append(f'**"{keyword}"** → Add to Skills section and describe where you used it')
+
         steps.append({
             "priority": "🔴 CRITICAL",
-            "category": "Missing Keywords",
-            "action": f"Add these high-impact keywords where truthful: {', '.join(top_missing[:5])}",
-            "details": [
-                f"Review the job description and identify where you've used these skills",
-                f"Add them to your Skills section if you have genuine experience",
-                f"Incorporate them into bullet points describing relevant projects or achievements",
-                f"Don't just list them - show how you used them with specific examples"
-            ],
-            "impact": f"Could improve Skills Coverage from {breakdown.skills_coverage:.0f}% to ~{min(90, breakdown.skills_coverage + 20):.0f}%"
+            "category": "Missing Required Keywords",
+            "action": f"Add these {len(gap_analysis['missing_critical'][:5])} critical keywords from the job requirements",
+            "details": specific_actions,
+            "impact": f"Skills Coverage: {breakdown.skills_coverage:.0f}% → ~{min(90, breakdown.skills_coverage + 25):.0f}%"
         })
 
-    # Priority 2: Keyword density/relevance (if similarity is low)
-    if breakdown.keyword_similarity < 70:
+    # CRITICAL: LinkedIn content that should be in CV
+    if gap_analysis['linkedin_additions']:
+        linkedin_actions = []
+        linkedin_actions.append("🔗 **Your LinkedIn has relevant content missing from your CV:**")
+
+        for item in gap_analysis['linkedin_additions'][:5]:
+            keyword = item['keyword']
+            context = item['context']
+            linkedin_actions.append(f'**"{keyword}"** - Your LinkedIn mentions: "{context}" → **COPY this to your CV** (relevant to the JD)')
+
+        if len(gap_analysis['linkedin_additions']) > 5:
+            linkedin_actions.append(f"Plus {len(gap_analysis['linkedin_additions']) - 5} more keywords from your LinkedIn that match the JD")
+
         steps.append({
             "priority": "🔴 CRITICAL",
-            "category": "Keyword Relevance",
-            "action": "Mirror the job description's language more closely",
-            "details": [
-                "Use the same terminology the job posting uses (e.g., if they say 'stakeholder engagement', don't say 'client communication')",
-                "Rewrite your professional summary to mention the exact role title and key requirements",
-                "Adjust your experience bullets to emphasize responsibilities that match the job description",
-                "Use industry-specific terms and phrases from the posting"
-            ],
-            "impact": f"Could improve Keyword Relevance from {breakdown.keyword_similarity:.0f}% to ~{min(90, breakdown.keyword_similarity + 25):.0f}%"
+            "category": "Transfer from LinkedIn",
+            "action": "Move these relevant experiences from LinkedIn to your CV",
+            "details": linkedin_actions,
+            "impact": f"Quick win - this content already exists on your profile! Could add {len(gap_analysis['linkedin_additions'])} missing keywords"
         })
 
-    # Priority 3: ATS formatting issues
+    # CRITICAL: Mirror specific language from JD
+    if breakdown.keyword_similarity < 70 and gap_analysis['key_phrases']:
+        phrase_actions = []
+        for phrase in gap_analysis['key_phrases'][:4]:
+            phrase_actions.append(f'Use phrase: **"{phrase}"** (appears multiple times in JD but missing in your resume)')
+
+        if jd_analysis['role_title']:
+            phrase_actions.insert(0, f'Start your summary with: "**{jd_analysis["role_title"]}** with expertise in..." matching the exact job title')
+
+        steps.append({
+            "priority": "🔴 CRITICAL",
+            "category": "Language Alignment",
+            "action": "Mirror these exact phrases from the job description",
+            "details": phrase_actions,
+            "impact": f"Keyword Relevance: {breakdown.keyword_similarity:.0f}% → ~{min(90, breakdown.keyword_similarity + 20):.0f}%"
+        })
+
+    # HIGH: Add/improve professional summary
+    if not gap_analysis['has_summary'] or breakdown.keyword_similarity < 75:
+        summary_bullets = []
+        if jd_analysis['role_title']:
+            summary_bullets.append(f'Add opening: "**{jd_analysis["role_title"]}** with [X] years of experience in [top 3 skills from JD]"')
+        if jd_analysis['required_years']:
+            summary_bullets.append(f'Explicitly state: "**{jd_analysis["required_years"]}+ years** of hands-on experience" (the JD requires this)')
+
+        # Add top 3 missing keywords to summary recommendation
+        if breakdown.missing_keywords[:3]:
+            summary_bullets.append(f'Include these keywords: **{", ".join(breakdown.missing_keywords[:3])}**')
+
+        if not gap_analysis['has_summary']:
+            summary_bullets.insert(0, '**CREATE a Professional Summary** section at the top of your resume (currently missing)')
+
+        steps.append({
+            "priority": "🟡 HIGH",
+            "category": "Professional Summary",
+            "action": "Add/rewrite your professional summary to match job requirements",
+            "details": summary_bullets if summary_bullets else ["Rewrite summary to include top keywords and exact role title"],
+            "impact": "Immediate ATS ranking boost - summary is scanned first"
+        })
+
+    # HIGH: ATS formatting issues
     if breakdown.ats_friendliness < 80 and breakdown.ats_reasons:
         steps.append({
             "priority": "🟡 HIGH",
             "category": "ATS Formatting",
-            "action": "Fix resume formatting for better ATS parsing",
-            "details": breakdown.ats_reasons + [
-                "Use a simple, single-column layout",
-                "Save as PDF from Word/Google Docs (not from design tools)",
-                "Use standard section headings: 'Experience', 'Education', 'Skills'",
-                "Avoid headers/footers, text boxes, tables, and graphics"
-            ],
-            "impact": f"Could improve ATS-Friendliness from {breakdown.ats_friendliness:.0f}% to ~95%"
+            "action": "Fix these formatting issues blocking ATS parsing",
+            "details": [f"**FIX:** {reason}" for reason in breakdown.ats_reasons],
+            "impact": f"ATS-Friendliness: {breakdown.ats_friendliness:.0f}% → ~95%"
         })
 
-    # Priority 4: Seniority alignment issues
-    if breakdown.seniority_alignment < 80:
+    # HIGH: Quantify achievements
+    if not gap_analysis['has_metrics']:
+        metrics_actions = [
+            "**REWRITE** at least 3 bullet points with numbers: '% improvement', '$ saved', '# of users', 'team size'",
+            "Example: Change 'Led development projects' → 'Led **5-person team** delivering **3 major projects**, improving efficiency by **40%**'",
+            "Example: Change 'Improved system performance' → 'Optimized database queries, reducing load time by **60%** for **10K+ daily users**'",
+        ]
+
+        if gap_analysis.get('linkedin_has_metrics'):
+            metrics_actions.insert(0, "🔗 **Your LinkedIn profile has quantified achievements - transfer those metrics to your CV!**")
+
         steps.append({
             "priority": "🟡 HIGH",
-            "category": "Seniority Alignment",
-            "action": "Address seniority level mismatch",
-            "details": [
-                breakdown.seniority_explanation,
-                "Add a 'X+ years of experience in [field]' statement in your summary",
-                "Use seniority indicators: for senior roles, emphasize leadership, mentoring, and strategic impact",
-                "Quantify your achievements with metrics and scope (team size, budget, users impacted)",
-                "If underqualified, highlight transferable skills and rapid learning ability"
-            ],
-            "impact": f"Could improve Seniority Alignment from {breakdown.seniority_alignment:.0f}% to ~{min(95, breakdown.seniority_alignment + 20):.0f}%"
+            "category": "Quantified Impact",
+            "action": "Add metrics to your achievements (currently missing)",
+            "details": metrics_actions,
+            "impact": "Major boost - quantified achievements score 3x higher in ATS ranking"
         })
 
-    # Additional optimization opportunities
-    if breakdown.skills_coverage >= 70 and breakdown.keyword_similarity >= 70:
+    # MEDIUM: Seniority alignment
+    if breakdown.seniority_alignment < 80:
+        seniority_actions = [breakdown.seniority_explanation]
+
+        if jd_analysis['required_years']:
+            years_statement = f'Add to summary: "**{jd_analysis["required_years"]}+ years** of [field] experience"'
+            seniority_actions.append(years_statement)
+
+        # Check if using action verbs appropriate for seniority
+        jd_lower = job_text.lower()
+        if any(word in jd_lower for word in ['lead', 'senior', 'principal']):
+            seniority_actions.append('**USE** senior-level action verbs: "Architected", "Led", "Mentored", "Drove", "Established"')
+            seniority_actions.append('**QUANTIFY** scope: team sizes, budget responsibility, strategic impact')
+
         steps.append({
-            "priority": "🟢 OPTIMIZATION",
-            "category": "Fine-Tuning",
-            "action": "Polish your already-strong resume",
-            "details": [
-                "Add more matched keywords in context throughout your resume",
-                "Ensure your most relevant experience is in the top 1/3 of your resume",
-                "Add quantified achievements (increased X by Y%, reduced Z by N hours)",
-                "Include relevant certifications or training if you have them",
-                "Customize your professional summary to mention this specific company/role"
-            ],
-            "impact": "Could push your score from good to excellent (90+%)"
+            "priority": "🟡 MEDIUM",
+            "category": "Seniority Match",
+            "action": "Adjust seniority signals",
+            "details": seniority_actions,
+            "impact": f"Seniority Alignment: {breakdown.seniority_alignment:.0f}% → ~{min(95, breakdown.seniority_alignment + 15):.0f}%"
         })
 
-    # Additional missing keywords if space for improvement
-    if breakdown.missing_keywords and len(breakdown.missing_keywords) > 10:
-        remaining = breakdown.missing_keywords[10:20]
-        if remaining:
-            steps.append({
-                "priority": "🟢 OPTIMIZATION",
-                "category": "Additional Keywords",
-                "action": f"Consider these secondary keywords: {', '.join(remaining[:5])}",
-                "details": [
-                    "These appeared in the job description but with less emphasis",
-                    "Add them if you have genuine experience, especially in a 'Technical Skills' or 'Tools' section",
-                    "Include them in project descriptions where relevant"
-                ],
-                "impact": "Marginal improvement, but could help in keyword-filtered searches"
-            })
+    # OPTIMIZATION: Already strong - fine-tune
+    if breakdown.skills_coverage >= 70 and breakdown.keyword_similarity >= 70:
+        optimize_actions = [
+            f"**ADD** these additional matched keywords throughout: {', '.join(breakdown.matched_keywords[:5])}",
+            "**REORDER** your experience - put most relevant role first, even if not most recent",
+        ]
+
+        if breakdown.missing_keywords[5:10]:
+            optimize_actions.append(f'**INCLUDE** secondary keywords: {", ".join(breakdown.missing_keywords[5:10])}')
+
+        steps.append({
+            "priority": "🟢 OPTIMIZE",
+            "category": "Fine-Tuning",
+            "action": "Polish your strong resume further",
+            "details": optimize_actions,
+            "impact": f"Push from {breakdown.overall:.0f} → 90+ score"
+        })
 
     return steps
 
@@ -312,6 +486,8 @@ def main() -> None:
 
             # Store in session state for resume generation
             st.session_state.job_text = job_text
+            st.session_state.resume_text = resume_text
+            st.session_state.linkedin_text = linkedin_text
             st.session_state.combined_resume_text = combined_resume_text
             st.session_state.breakdown = breakdown
             st.session_state.analysis_complete = True
@@ -354,8 +530,9 @@ def main() -> None:
 
             # Generate actionable steps
             job_text = st.session_state.job_text
-            resume_text = st.session_state.combined_resume_text
-            action_steps = generate_actionable_steps(breakdown, job_text, resume_text)
+            resume_text = st.session_state.resume_text
+            linkedin_text = st.session_state.get('linkedin_text', '')
+            action_steps = generate_actionable_steps(breakdown, job_text, resume_text, linkedin_text)
 
             # Display score interpretation first
             if breakdown.overall >= 80:
