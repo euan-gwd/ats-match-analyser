@@ -19,20 +19,7 @@ from app.core.security_utils import (
     scrub_pii_from_logs
 )
 from app.core.gdpr_compliance import GDPRCompliance
-
-# Import the actionable steps generator from the parent directory
-import sys
-from pathlib import Path
-# Add parent directory to path to import from root app.py
-root_dir = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(root_dir))
-
-try:
-    from app import generate_actionable_steps
-except ImportError:
-    # If import fails, create a simple placeholder
-    def generate_actionable_steps(breakdown, job_text, resume_text, linkedin_text=""):
-        return []
+from app.core.actionable_steps import generate_actionable_steps
 
 # Initialize FastAPI app
 app = FastAPI(

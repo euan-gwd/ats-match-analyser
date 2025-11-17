@@ -90,9 +90,11 @@ export default function Results({ data }) {
 
       {/* Seniority */}
       {data.seniority_explanation && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-          <h3 className="text-lg font-bold text-blue-900 mb-2">📊 Seniority Analysis</h3>
-          <p className="text-blue-800">{data.seniority_explanation}</p>
+        <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-6">
+          <h3 className="text-lg font-bold text-blue-900 mb-3">📊 Seniority Analysis</h3>
+          <div className="text-blue-900 space-y-2 whitespace-pre-line leading-relaxed">
+            {data.seniority_explanation}
+          </div>
         </div>
       )}
 

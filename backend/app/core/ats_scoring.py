@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -223,35 +223,70 @@ def _seniority_alignment(jd_text: str, resume_text: str) -> Tuple[float, str]:
     cv_ord = order.get(cv_level, 2)
 
     diff = cv_ord - jd_ord
+
+    # Level alignment with detailed, actionable feedback
     if diff == 0:
         level_score = 1.0
-        explanation_parts.append("Seniority level looks well aligned with the job description.")
+        explanation_parts.append(f"✓ Your resume's seniority level ({cv_level}) aligns perfectly with the job posting ({jd_level}).")
+        explanation_parts.append("This means ATS systems and recruiters will see you as an appropriate match for this role.")
     elif diff == -1:
         level_score = 0.85
-        explanation_parts.append("Resume is slightly more junior than the job; highlight impact and ownership.")
+        explanation_parts.append(f"⚠️ Your resume appears slightly more junior ({cv_level}) than the role requires ({jd_level}).")
+        explanation_parts.append("To strengthen your position:")
+        explanation_parts.append("• Emphasize IMPACT and RESULTS in your bullet points (e.g., 'Led team of 5', 'Reduced costs by 30%', 'Architected system serving 1M+ users')")
+        explanation_parts.append("• Highlight leadership, mentoring, or ownership experiences")
+        explanation_parts.append("• Use action verbs that demonstrate autonomy: 'Architected', 'Drove', 'Owned', 'Spearheaded'")
+        explanation_parts.append("• Add metrics and scale to show senior-level contribution")
     elif diff <= -2:
         level_score = 0.6
-        explanation_parts.append("Resume appears significantly more junior than the role; you may be screened out.")
+        explanation_parts.append(f"🚨 Significant mismatch: Your resume reads as {cv_level} level while the job requires {jd_level} level.")
+        explanation_parts.append("This is a major red flag for ATS systems and recruiters. You may be automatically screened out.")
+        explanation_parts.append("\nTo address this gap:")
+        explanation_parts.append("• RE-FRAME your experience: Focus on the most complex, high-impact projects you've worked on")
+        explanation_parts.append("• QUANTIFY everything: Show scale, complexity, and business impact with specific numbers")
+        explanation_parts.append("• ADD missing experience: Consider freelance projects, open-source contributions, or upskilling to bridge the gap")
+        explanation_parts.append("• EMPHASIZE strategic thinking and decision-making in your descriptions")
+        explanation_parts.append("• Consider if this role is truly a fit—applying might waste your time and hurt your ATS history")
     elif diff == 1:
         level_score = 0.9
-        explanation_parts.append("Resume is slightly more senior; might be acceptable but ensure relevance.")
+        explanation_parts.append(f"Your resume appears slightly more senior ({cv_level}) than the role ({jd_level}).")
+        explanation_parts.append("This can work in your favor, but watch for these risks:")
+        explanation_parts.append("• Recruiters may worry you'll leave for a more senior role")
+        explanation_parts.append("• They might think you're overqualified and too expensive")
+        explanation_parts.append("\nMitigation strategies:")
+        explanation_parts.append("• In your cover letter, explicitly state why you're interested in THIS role")
+        explanation_parts.append("• Focus resume content on skills DIRECTLY relevant to the job description")
+        explanation_parts.append("• Downplay management/leadership aspects if the role is IC-focused")
     else:
         level_score = 0.8
-        explanation_parts.append("Resume is considerably more senior; ATS may still match but recruiter fit is uncertain.")
+        explanation_parts.append(f"⚠️ Your resume reads as significantly more senior ({cv_level}) than the posted role ({jd_level}).")
+        explanation_parts.append("This raises several concerns:")
+        explanation_parts.append("• ATS may flag you as overqualified")
+        explanation_parts.append("• Hiring managers may assume you'll be bored or leave quickly")
+        explanation_parts.append("• Salary expectations may not align")
+        explanation_parts.append("\nIf you still want to apply:")
+        explanation_parts.append("• Create a targeted resume that focuses on relevant skills, not seniority")
+        explanation_parts.append("• Remove or minimize management/leadership responsibilities")
+        explanation_parts.append("• Write a cover letter explaining your genuine interest")
+        explanation_parts.append("• Consider if this is the right role—applying could hurt your ATS profile")
 
-    # Years of experience consistency check
+    # Years of experience consistency check with detailed guidance
     if jd_years and cv_years:
         if cv_years + 1 < jd_years:
             level_score *= 0.8
-            explanation_parts.append(
-                f"Job seems to expect around {jd_years:.0f}+ years; resume signals about {cv_years:.0f}."
-            )
+            years_gap = jd_years - cv_years
+            explanation_parts.append(f"\n📅 Experience gap: The job expects {jd_years:.0f}+ years but your resume shows ~{cv_years:.0f} years.")
+            explanation_parts.append(f"This {years_gap:.0f}-year gap is significant.")
+            explanation_parts.append("\nStrategies to compensate:")
+            explanation_parts.append("• COUNT all relevant experience: Include internships, freelance, side projects, open-source")
+            explanation_parts.append("• EMPHASIZE accelerated learning and rapid skill acquisition")
+            explanation_parts.append("• HIGHLIGHT any mentorship, teaching, or knowledge-sharing that shows maturity")
+            explanation_parts.append("• QUANTIFY impact to show you deliver senior-level results despite fewer years")
         elif cv_years >= jd_years:
-            explanation_parts.append(
-                f"Years of experience ({cv_years:.0f}+) seem sufficient for the role ({jd_years:.0f}+)."
-            )
+            explanation_parts.append(f"\n✓ Experience timeline: Your {cv_years:.0f}+ years meets the {jd_years:.0f}+ years requirement.")
+            explanation_parts.append("Make sure your resume CLEARLY shows this timeline in your work history section.")
 
-    explanation = " ".join(explanation_parts) if explanation_parts else "Seniority alignment is unclear."
+    explanation = "\n".join(explanation_parts) if explanation_parts else "Seniority alignment is unclear—no explicit level keywords detected in the job posting."
     return float(max(0.0, min(1.0, level_score))), explanation
 
 
@@ -308,11 +343,21 @@ def _posting_recency_factor(posting_date_str: str) -> Tuple[float, str]:
         return 1.0, "Posting date not provided; assuming the role is current."
 
     try:
-        dt = parse_date(posting_date_str).date()
+        dt = parse_date(posting_date_str)
+        # If no timezone info, assume UTC
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
     except Exception:
         return 1.0, "Could not parse posting date; ignoring recency factor."
 
-    days_open = (datetime.utcnow().date() - dt).days
+    # Calculate days since posting (using timezone-aware datetime)
+    now = datetime.now(timezone.utc)
+    days_open = (now.date() - dt.date()).days
+
+    # Handle future dates or invalid dates
+    if days_open < 0:
+        return 1.0, "Posting date is in the future; assuming it's current."
+
     if days_open <= 14:
         return 1.0, "Role looks quite fresh; strong match is more likely to be seen."
     elif days_open <= 45:
