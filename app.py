@@ -181,25 +181,27 @@ def generate_actionable_steps(breakdown, job_text: str, resume_text: str, linked
 
     # CRITICAL: LinkedIn content that should be in CV
     if gap_analysis['linkedin_additions']:
-        linkedin_actions = []
+        linkedin_actions = [
+            '🔗 **QUICK WIN: Your LinkedIn already has this content**\n'
+        ]
 
         for idx, item in enumerate(gap_analysis['linkedin_additions'][:5], 1):
             keyword = item['keyword']
-            context = item['context']
+            context = item['context'][:100]
             linkedin_actions.append(
-                f'{idx}. **"{keyword}"** - Your LinkedIn says: "{context}" '
-                f'→ Copy this to your CV Skills/Experience section'
+                f'{idx}. Open LinkedIn → Find: "{context}..."\n'
+                f'   Copy that bullet → Paste into CV Experience or Skills\n'
             )
 
         if len(gap_analysis['linkedin_additions']) > 5:
-            linkedin_actions.append(f"...plus {len(gap_analysis['linkedin_additions']) - 5} more on your LinkedIn")
+            linkedin_actions.append(f"   ...and {len(gap_analysis['linkedin_additions']) - 5} more items")
 
         steps.append({
             "priority": "🔴 CRITICAL",
-            "category": "Copy from Your LinkedIn",
-            "action": "Copy these existing descriptions from your LinkedIn profile",
+            "category": "Copy from LinkedIn",
+            "action": "5 min task: Copy-paste these bullets from your LinkedIn",
             "details": linkedin_actions,
-            "impact": f"Instant add of {len(gap_analysis['linkedin_additions'])} missing keywords"
+            "impact": f"Instant boost: adds {len(gap_analysis['linkedin_additions'])} required keywords"
         })
 
     # CRITICAL: Mirror specific language from JD
@@ -208,7 +210,8 @@ def generate_actionable_steps(breakdown, job_text: str, resume_text: str, linked
 
         if jd_analysis['role_title']:
             phrase_actions.append(
-                f'• **Line 1 of CV**: Change to "{jd_analysis["role_title"]} with [X] years in [top 3 skills]"'
+                f'**LINE 1 (right under your name)**\n'
+                f'   Change to: "{jd_analysis["role_title"]} | [X]+ years | [top 3 skills from JD]"\n'
             )
 
         for phrase in gap_analysis['key_phrases'][:3]:
@@ -222,11 +225,15 @@ def generate_actionable_steps(breakdown, job_text: str, resume_text: str, linked
 
             if phrase_context:
                 phrase_actions.append(
-                    f'• Use **"{phrase}"**: JD says "{phrase_context}..." '
-                    f'→ Add this phrase in 2-3 Experience bullets'
+                    f'**"{phrase}"**\n'
+                    f'   JD context: "{phrase_context}..."\n'
+                    f'   → Use this EXACT phrase in 2 different job bullets'
                 )
             else:
-                phrase_actions.append(f'• Use phrase **"{phrase}"** → Add in Experience bullets')
+                phrase_actions.append(
+                    f'**"{phrase}"**\n'
+                    f'   → Use this exact phrase in 2 job bullets under Experience'
+                )
 
         steps.append({
             "priority": "🔴 CRITICAL",
@@ -241,57 +248,65 @@ def generate_actionable_steps(breakdown, job_text: str, resume_text: str, linked
         summary_bullets = []
 
         if not gap_analysis['has_summary']:
-            summary_bullets.append('❌ **MISSING: Professional Summary at top of CV**')
+            summary_bullets.append('**❌ MISSING: Professional Summary**\n')
 
-        # Build the template
+        # Build template with actual JD data
         template_parts = []
         if jd_analysis['role_title']:
             template_parts.append(f"{jd_analysis['role_title']}")
         else:
-            template_parts.append("[Role from JD]")
+            template_parts.append("[Your Role Title]")
 
         if jd_analysis['required_years']:
             template_parts.append(f"with {jd_analysis['required_years']}+ years")
         else:
-            template_parts.append("with [X] years")
+            template_parts.append("with [X]+ years")
 
-        if breakdown.missing_keywords[:3]:
-            template_parts.append(f"in {', '.join(breakdown.missing_keywords[:3])}")
+        if breakdown.missing_keywords[:2]:
+            template_parts.append(f"specializing in {', '.join(breakdown.missing_keywords[:2])}")
 
-        template = " ".join(template_parts) + ". [One achievement]. [One goal from JD]."
+        template = " ".join(template_parts) + ". [Your top achievement with numbers]. [One key goal matching JD]."
 
-        summary_bullets.append(f'**Copy this template**: "{template}"')
-
-        if jd_analysis['required_years']:
-            summary_bullets.append(f'⚠️ Must state "{jd_analysis["required_years"]}+ years" - JD requires it')
+        summary_bullets.append(
+            f'**WHERE TO ADD**: Right after your contact info, before Experience\\n'
+            f'**HEADING**: \"Professional Summary\" or \"Profile\"\\n\\n'
+            f'**COPY THIS TEMPLATE**:\\n'
+            f'\"{template}\"\\n\\n'
+            f'**EXAMPLE**:\\n'
+            f'\"Senior Frontend Engineer with 7+ years specializing in React, TypeScript. '
+            f'Led team of 6 delivering product used by 50K+ users daily. '
+            f'Seeking to build scalable web applications for enterprise clients.\"'
+        )
 
         steps.append({
             "priority": "🟡 HIGH",
-            "category": "Professional Summary",
-            "action": "Add summary as first section (right after name/contact)",
+            "category": "Add Professional Summary",
+            "action": "Add 3-sentence summary at top of CV",
             "details": summary_bullets,
-            "impact": "Summary read first by ATS - 15-20% of total score"
+            "impact": "ATS reads summary first - controls 15-20% of total score"
         })
 
     # HIGH: ATS formatting issues
     if breakdown.ats_friendliness < 80 and breakdown.ats_reasons:
-        format_actions = []
-        for reason in breakdown.ats_reasons:
-            if "short" in reason.lower() or "long" in reason.lower():
-                format_actions.append(f'• {reason} → Aim for 2 pages, 3-4 bullets per job')
+        format_actions = ['**FIX THESE FORMAT PROBLEMS**:\n']
+        for i, reason in enumerate(breakdown.ats_reasons, 1):
+            if "short" in reason.lower():
+                format_actions.append(f'{i}. {reason}\n   → Add more bullets: aim for 3-4 per job\n')
+            elif "long" in reason.lower():
+                format_actions.append(f'{i}. {reason}\n   → Cut to 2 pages: remove old jobs or consolidate\n')
             elif "column" in reason.lower() or "layout" in reason.lower():
-                format_actions.append(f'• {reason} → Use single-column, save as PDF from Word/Docs')
+                format_actions.append(f'{i}. {reason}\n   → Go to Layout > Columns > One in Word/Docs, then Save as PDF\n')
             elif "header" in reason.lower() or "section" in reason.lower():
-                format_actions.append(f'• {reason} → Add bold headings: Summary, Experience, Education, Skills')
+                format_actions.append(f'{i}. {reason}\n   → Add bold section headers: Summary, Experience, Education, Skills\n')
             else:
-                format_actions.append(f'• {reason}')
+                format_actions.append(f'{i}. {reason}\n')
 
         steps.append({
             "priority": "🟡 HIGH",
-            "category": "ATS Format Issues",
-            "action": "Fix formatting so ATS can parse your CV",
+            "category": "Fix ATS Format Problems",
+            "action": "ATS can't read your CV properly - fix these formatting issues",
             "details": format_actions,
-            "impact": f"Score: {breakdown.ats_friendliness:.0f}% → 95%"
+            "impact": f"Format score: {breakdown.ats_friendliness:.0f}% → 95%"
         })
 
     # HIGH: Quantify achievements
@@ -306,10 +321,14 @@ def generate_actionable_steps(breakdown, job_text: str, resume_text: str, linked
         verb = cv_verbs[0] if cv_verbs else "Led"
 
         metrics_actions.extend([
-            f'• ❌ "{verb} projects" → ✅ "{verb} **5-person team** on **3 projects** over **18 months**"',
-            f'• ❌ "Improved performance" → ✅ "Improved performance by **60%** for **10K+ users**"',
-            f'• ❌ "Reduced costs" → ✅ "Reduced costs by **$50K annually**"',
-            '→ Add numbers to 3+ bullets: team size, %, $, time, users impacted'
+            f'REWRITE 3 BULLETS - ADD NUMBERS:\n',
+            f'1. ❌ "{verb} projects"\n'
+            f'   ✅ "{verb} **5-person team** on **3 projects** over **18 months**"\n',
+            f'2. ❌ "Improved performance"\n'
+            f'   ✅ "Improved performance by **60%** for **10,000+ users**"\n',
+            f'3. ❌ "Reduced costs"\n'
+            f'   ✅ "Reduced costs by **$50K annually**"\n',
+            '→ Pick your 3 best achievements, add: %, $, team size, # of users, timeframe'
         ])
 
         steps.append({
