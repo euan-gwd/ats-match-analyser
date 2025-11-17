@@ -1,4 +1,5 @@
 import io
+import secrets
 from datetime import date
 from typing import Optional
 
@@ -9,6 +10,24 @@ from pypdf import PdfReader
 
 from ats_scoring import score_resume_against_job
 from resume_optimizer import build_optimized_resume, build_optimized_resume_docx
+from security_utils import (
+    SecurityConfig,
+    sanitize_filename,
+    sanitize_url,
+    validate_content_safety,
+    validate_file_extension,
+    validate_file_size,
+    check_session_timeout,
+    rate_limit_check,
+    secure_session_cleanup,
+    log_security_event,
+    hash_text
+)
+from gdpr_compliance import (
+    GDPRCompliance,
+    AuditLog,
+    get_data_export
+)
 
 
 def _extract_job_phrases(job_text: str) -> dict:
@@ -91,6 +110,8 @@ def _analyze_resume_gaps(job_text: str, resume_text: str, missing_keywords: list
 
     # LinkedIn-specific analysis: find content in LinkedIn but missing from CV
     linkedin_additions = []
+    linkedin_has_better_metrics = False
+
     if linkedin_lower and len(linkedin_lower) > 100:
         # Find skills/keywords in LinkedIn that match JD but are missing from CV
         for keyword in missing_keywords[:15]:
@@ -105,7 +126,6 @@ def _analyze_resume_gaps(job_text: str, resume_text: str, missing_keywords: list
                     })
 
         # Check if LinkedIn has metrics that CV lacks
-        linkedin_has_better_metrics = False
         if not has_metrics:
             linkedin_metrics = re.findall(r'\d+%|\$[\d,]+|\d+\+?\s+(?:users|people|employees|projects|customers)', linkedin_lower)
             if len(linkedin_metrics) > 2:
@@ -117,7 +137,7 @@ def _analyze_resume_gaps(job_text: str, resume_text: str, missing_keywords: list
         'has_metrics': has_metrics,
         'missing_critical': [k for k in missing_keywords[:8] if k in jd_lower and k not in cv_lower],
         'linkedin_additions': linkedin_additions[:8],
-        'linkedin_has_metrics': linkedin_has_better_metrics if linkedin_lower else False
+        'linkedin_has_metrics': linkedin_has_better_metrics
     }
 
 
@@ -367,10 +387,80 @@ def main() -> None:
         layout="wide",
     )
 
+    # Initialize session ID for GDPR audit logging
+    if 'session_id' not in st.session_state:
+        st.session_state.session_id = secrets.token_hex(16)
+
+    # Check session timeout
+    if not check_session_timeout(st.session_state):
+        st.warning("⏱️ Your session has timed out for security. Please refresh to start a new session.")
+        secure_session_cleanup(st.session_state)
+        log_security_event('SESSION_TIMEOUT', {'session_id': st.session_state.session_id})
+        st.stop()
+
+    # GDPR Consent Check
+    if 'gdpr_consent' not in st.session_state:
+        st.session_state.gdpr_consent = False
+
+    if not st.session_state.gdpr_consent:
+        st.title("📄 ATS Match Analyzer")
+        st.markdown("### Welcome! Privacy & Data Protection First")
+
+        with st.expander("🔒 Privacy Notice (Click to Read)", expanded=True):
+            st.markdown(GDPRCompliance.get_privacy_notice())
+
+        st.markdown("---")
+        st.markdown(GDPRCompliance.get_consent_text())
+
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("✅ I Consent & Accept", type="primary", use_container_width=True):
+                st.session_state.gdpr_consent = True
+                GDPRCompliance.log_consent(st.session_state.session_id, True)
+                AuditLog.log_processing_activity(
+                    'USER_CONSENT_GIVEN',
+                    st.session_state.session_id,
+                    ['resume', 'linkedin', 'job_description']
+                )
+                st.rerun()
+
+        with col2:
+            if st.button("❌ I Do Not Consent", use_container_width=True):
+                GDPRCompliance.log_consent(st.session_state.session_id, False)
+                st.info("You must consent to data processing to use this service. No data has been collected.")
+                st.stop()
+
+        st.stop()
+
     st.title("📄 ATS Match Analyzer")
     st.markdown(
         "Evaluate how your resume is likely to perform in a modern ATS against a specific job posting."
     )
+
+    # Add privacy controls
+    with st.sidebar:
+        st.markdown("---")
+        with st.expander("🔒 Privacy Controls"):
+            if st.button("🗑️ Delete My Data & End Session", use_container_width=True):
+                secure_session_cleanup(st.session_state)
+                GDPRCompliance.log_data_deletion(st.session_state.session_id, 'user_requested')
+                st.success("All your data has been securely deleted.")
+                st.info("Please refresh the page to start a new session.")
+                st.stop()
+
+            if st.button("📥 Export My Analysis Data", use_container_width=True):
+                if st.session_state.get('analysis_complete'):
+                    export_data = get_data_export(st.session_state)
+                    st.download_button(
+                        "Download JSON",
+                        data=str(export_data),
+                        file_name=f"ats_analysis_{date.today().isoformat()}.json",
+                        mime="application/json"
+                    )
+                else:
+                    st.info("Complete an analysis first to export data.")
+
+            st.caption("🔒 Your data is session-only and auto-deletes after 30 min of inactivity")
 
     with st.sidebar:
         st.header("Job description")
@@ -437,36 +527,129 @@ def main() -> None:
 
     # Main content area
     if analyze_button:
+        # Rate limiting check
+        is_allowed, error_msg = rate_limit_check(st.session_state)
+        if not is_allowed:
+            st.error(f"🚫 {error_msg}")
+            log_security_event('RATE_LIMIT_EXCEEDED', {'session_id': st.session_state.session_id})
+            return
+
         # Clear previous generation state
         st.session_state.docx_generated = False
         st.session_state.text_generated = False
 
         with st.spinner("Parsing documents and emulating ATS scoring..."):
-            # Basic validation
-            job_text = get_job_description_text(jd_mode, jd_text_input, jd_pdf_file, jd_url_input)
+            # Validate and get job description
+            job_text = ""
+
+            if jd_mode == "Paste text":
+                job_text = (jd_text_input or "").strip()
+                # Validate content safety
+                is_safe, safety_error = validate_content_safety(job_text)
+                if not is_safe:
+                    st.error(f"🚫 {safety_error}")
+                    return
+
+            elif jd_mode == "Upload PDF":
+                if not jd_pdf_file:
+                    st.error("Please upload a job description PDF.")
+                    return
+
+                # Validate file
+                filename = sanitize_filename(jd_pdf_file.name)
+                if not validate_file_extension(filename):
+                    st.error("🚫 Invalid file type. Only PDF files are allowed.")
+                    log_security_event('INVALID_FILE_TYPE', {'filename': filename})
+                    return
+
+                file_bytes = jd_pdf_file.read()
+                if not validate_file_size(file_bytes, SecurityConfig.MAX_JD_SIZE):
+                    st.error(f"🚫 File too large. Maximum size is {SecurityConfig.MAX_JD_SIZE / 1024 / 1024:.0f}MB.")
+                    return
+
+                try:
+                    job_text = extract_text_from_pdf(file_bytes)
+                except RuntimeError as e:
+                    st.error(f"Failed to read PDF: {str(e)}")
+                    return
+
+            elif jd_mode == "Job URL":
+                if not jd_url_input:
+                    st.error("Please provide a job posting URL.")
+                    return
+
+                # Validate and sanitize URL
+                safe_url = sanitize_url(jd_url_input.strip())
+                if not safe_url:
+                    st.error("🚫 Invalid or unsafe URL. Please use HTTPS URLs only.")
+                    return
+
+                try:
+                    job_text = fetch_text_from_url(safe_url)
+                except RuntimeError as e:
+                    st.error(f"Failed to fetch URL: {str(e)}")
+                    return
+
+            # Validate job description
             if not job_text or len(job_text.strip()) < 200:
-                st.error(
-                    "The job description looks very short or is missing. Please provide the full job description."
-                )
+                st.error("The job description looks very short or is missing. Please provide the full job description.")
                 return
 
+            is_safe, safety_error = validate_content_safety(job_text)
+            if not is_safe:
+                st.error(f"🚫 {safety_error}")
+                return
+
+            # Validate resume file
             if not resume_file:
                 st.error("Please upload your resume as a PDF.")
                 return
 
-            # Resume + optional LinkedIn text
+            # Validate resume file
+            resume_filename = sanitize_filename(resume_file.name)
+            if not validate_file_extension(resume_filename):
+                st.error("🚫 Invalid file type. Only PDF files are allowed.")
+                log_security_event('INVALID_FILE_TYPE', {'filename': resume_filename})
+                return
+
+            resume_bytes = resume_file.read()
+            if not validate_file_size(resume_bytes, SecurityConfig.MAX_RESUME_SIZE):
+                st.error(f"🚫 Resume file too large. Maximum size is {SecurityConfig.MAX_RESUME_SIZE / 1024 / 1024:.0f}MB.")
+                return
+
+            # Extract resume text
             try:
-                resume_text = extract_text_from_pdf(resume_file.read())
+                resume_text = extract_text_from_pdf(resume_bytes)
             except RuntimeError as e:
                 st.error(str(e))
                 return
 
+            # Validate resume content
+            is_safe, safety_error = validate_content_safety(resume_text)
+            if not is_safe:
+                st.error(f"🚫 {safety_error}")
+                return
+
             all_text_parts = [resume_text]
 
-            # LinkedIn profile (best-effort, public only)
-            linkedin_text = get_linkedin_profile_text(linkedin_url_sidebar.strip() or None)
-            if linkedin_text:
-                all_text_parts.append(linkedin_text)
+            # LinkedIn profile (optional, best-effort, public only)
+            linkedin_text = ""
+            if linkedin_url_sidebar and linkedin_url_sidebar.strip():
+                safe_linkedin_url = sanitize_url(linkedin_url_sidebar.strip())
+                if safe_linkedin_url:
+                    try:
+                        linkedin_text = get_linkedin_profile_text(safe_linkedin_url)
+                        if linkedin_text:
+                            # Validate LinkedIn content
+                            is_safe, _ = validate_content_safety(linkedin_text)
+                            if is_safe:
+                                all_text_parts.append(linkedin_text)
+                            else:
+                                linkedin_text = ""  # Ignore if unsafe
+                    except Exception:
+                        linkedin_text = ""  # Silently fail for optional LinkedIn
+                else:
+                    st.warning("LinkedIn URL appears unsafe - skipping LinkedIn profile.")
 
             combined_resume_text = "\n\n".join(t for t in all_text_parts if t and t.strip())
 
@@ -477,6 +660,17 @@ def main() -> None:
                 )
 
             posting_date_str = posting_date.isoformat() if posting_date else ""
+
+            # Log processing activity (GDPR audit)
+            data_categories = ['resume', 'job_description']
+            if linkedin_text:
+                data_categories.append('linkedin_profile')
+
+            AuditLog.log_processing_activity(
+                'ATS_ANALYSIS_STARTED',
+                st.session_state.session_id,
+                data_categories
+            )
 
             breakdown = score_resume_against_job(
                 jd_text=job_text,
@@ -491,6 +685,13 @@ def main() -> None:
             st.session_state.combined_resume_text = combined_resume_text
             st.session_state.breakdown = breakdown
             st.session_state.analysis_complete = True
+
+            # Log completion
+            AuditLog.log_processing_activity(
+                'ATS_ANALYSIS_COMPLETED',
+                st.session_state.session_id,
+                data_categories
+            )
 
     # Display results if analysis has been completed
     if st.session_state.get("analysis_complete", False):
