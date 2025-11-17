@@ -28,7 +28,7 @@ The app:
 From the project root:
 
 ```bash
-cd "/ats killer"
+cd "/ats match analyser"
 python3 -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -r requirements.txt
