@@ -11,6 +11,107 @@ from ats_scoring import score_resume_against_job
 from resume_optimizer import build_optimized_resume, build_optimized_resume_docx
 
 
+def generate_actionable_steps(breakdown, job_text: str, resume_text: str) -> list[dict]:
+    """Generate prioritized, actionable steps to improve the resume."""
+    steps = []
+
+    # Priority 1: Critical missing keywords (if skills coverage is low)
+    if breakdown.skills_coverage < 70 and breakdown.missing_keywords:
+        top_missing = breakdown.missing_keywords[:10]
+        steps.append({
+            "priority": "🔴 CRITICAL",
+            "category": "Missing Keywords",
+            "action": f"Add these high-impact keywords where truthful: {', '.join(top_missing[:5])}",
+            "details": [
+                f"Review the job description and identify where you've used these skills",
+                f"Add them to your Skills section if you have genuine experience",
+                f"Incorporate them into bullet points describing relevant projects or achievements",
+                f"Don't just list them - show how you used them with specific examples"
+            ],
+            "impact": f"Could improve Skills Coverage from {breakdown.skills_coverage:.0f}% to ~{min(90, breakdown.skills_coverage + 20):.0f}%"
+        })
+
+    # Priority 2: Keyword density/relevance (if similarity is low)
+    if breakdown.keyword_similarity < 70:
+        steps.append({
+            "priority": "🔴 CRITICAL",
+            "category": "Keyword Relevance",
+            "action": "Mirror the job description's language more closely",
+            "details": [
+                "Use the same terminology the job posting uses (e.g., if they say 'stakeholder engagement', don't say 'client communication')",
+                "Rewrite your professional summary to mention the exact role title and key requirements",
+                "Adjust your experience bullets to emphasize responsibilities that match the job description",
+                "Use industry-specific terms and phrases from the posting"
+            ],
+            "impact": f"Could improve Keyword Relevance from {breakdown.keyword_similarity:.0f}% to ~{min(90, breakdown.keyword_similarity + 25):.0f}%"
+        })
+
+    # Priority 3: ATS formatting issues
+    if breakdown.ats_friendliness < 80 and breakdown.ats_reasons:
+        steps.append({
+            "priority": "🟡 HIGH",
+            "category": "ATS Formatting",
+            "action": "Fix resume formatting for better ATS parsing",
+            "details": breakdown.ats_reasons + [
+                "Use a simple, single-column layout",
+                "Save as PDF from Word/Google Docs (not from design tools)",
+                "Use standard section headings: 'Experience', 'Education', 'Skills'",
+                "Avoid headers/footers, text boxes, tables, and graphics"
+            ],
+            "impact": f"Could improve ATS-Friendliness from {breakdown.ats_friendliness:.0f}% to ~95%"
+        })
+
+    # Priority 4: Seniority alignment issues
+    if breakdown.seniority_alignment < 80:
+        steps.append({
+            "priority": "🟡 HIGH",
+            "category": "Seniority Alignment",
+            "action": "Address seniority level mismatch",
+            "details": [
+                breakdown.seniority_explanation,
+                "Add a 'X+ years of experience in [field]' statement in your summary",
+                "Use seniority indicators: for senior roles, emphasize leadership, mentoring, and strategic impact",
+                "Quantify your achievements with metrics and scope (team size, budget, users impacted)",
+                "If underqualified, highlight transferable skills and rapid learning ability"
+            ],
+            "impact": f"Could improve Seniority Alignment from {breakdown.seniority_alignment:.0f}% to ~{min(95, breakdown.seniority_alignment + 20):.0f}%"
+        })
+
+    # Additional optimization opportunities
+    if breakdown.skills_coverage >= 70 and breakdown.keyword_similarity >= 70:
+        steps.append({
+            "priority": "🟢 OPTIMIZATION",
+            "category": "Fine-Tuning",
+            "action": "Polish your already-strong resume",
+            "details": [
+                "Add more matched keywords in context throughout your resume",
+                "Ensure your most relevant experience is in the top 1/3 of your resume",
+                "Add quantified achievements (increased X by Y%, reduced Z by N hours)",
+                "Include relevant certifications or training if you have them",
+                "Customize your professional summary to mention this specific company/role"
+            ],
+            "impact": "Could push your score from good to excellent (90+%)"
+        })
+
+    # Additional missing keywords if space for improvement
+    if breakdown.missing_keywords and len(breakdown.missing_keywords) > 10:
+        remaining = breakdown.missing_keywords[10:20]
+        if remaining:
+            steps.append({
+                "priority": "🟢 OPTIMIZATION",
+                "category": "Additional Keywords",
+                "action": f"Consider these secondary keywords: {', '.join(remaining[:5])}",
+                "details": [
+                    "These appeared in the job description but with less emphasis",
+                    "Add them if you have genuine experience, especially in a 'Technical Skills' or 'Tools' section",
+                    "Include them in project descriptions where relevant"
+                ],
+                "impact": "Marginal improvement, but could help in keyword-filtered searches"
+            })
+
+    return steps
+
+
 def extract_text_from_pdf(file_bytes: bytes) -> str:
     """Extract text from a PDF file."""
     try:
@@ -249,50 +350,67 @@ def main() -> None:
             )
 
         with right:
-            st.subheader("Recommendations (as if from a recruiter using ATS search)")
+            st.subheader("🎯 Actionable Steps to Improve Your Match")
 
-            st.markdown("##### 1. High-impact keywords and skills")
-            if breakdown.missing_keywords:
-                st.write(
-                    "These job-specific terms are **important in the description but missing or under-emphasized in your resume**. "
-                    "Where genuinely true, weave them into your experience bullets, skills section, and summary:"
-                )
-                st.write(", ".join(sorted(set(breakdown.missing_keywords))))
+            # Generate actionable steps
+            job_text = st.session_state.job_text
+            resume_text = st.session_state.combined_resume_text
+            action_steps = generate_actionable_steps(breakdown, job_text, resume_text)
+
+            # Display score interpretation first
+            if breakdown.overall >= 80:
+                st.success("✅ **Strong Match** - Your resume should perform well in ATS. Focus on fine-tuning.")
+            elif breakdown.overall >= 60:
+                st.warning("⚠️ **Decent Match** - Improvements recommended before applying. Address critical items below.")
             else:
-                st.write(
-                    "Your resume already covers most of the high-value keywords and skills from this job description."
-                )
+                st.error("❌ **Weak Match** - Significant improvements needed. Consider if this role truly fits your background.")
 
+            st.markdown("---")
+
+            # Display actionable steps with priority ordering
+            for idx, step in enumerate(action_steps, 1):
+                with st.expander(f"**{step['priority']}** - {step['category']}: {step['action']}", expanded=(idx <= 2)):
+                    st.markdown(f"**What to do:**")
+                    for detail in step['details']:
+                        st.markdown(f"• {detail}")
+                    st.markdown(f"**Expected Impact:** {step['impact']}")
+
+            st.markdown("---")
+
+            # Show matched keywords for reference
             if breakdown.matched_keywords:
-                with st.expander("Keywords you're already covering well"):
+                with st.expander("✅ Keywords you're already covering well"):
                     st.write(", ".join(sorted(set(breakdown.matched_keywords))))
+                    st.caption("Keep these prominent in your resume!")
 
-            st.markdown("##### 2. Seniority & fit signals")
-            st.write(breakdown.seniority_explanation)
-            st.write(
-                "If ATS filters are set to narrow bands (e.g., '3–5 years experience' or 'Senior'), "
-                "consider explicitly stating your years of experience and level in your summary."
-            )
+            st.markdown("---")
 
-            st.markdown("##### 3. ATS-friendly formatting")
-            if breakdown.ats_reasons:
-                st.write(
-                    "These formatting issues can reduce how well ATS parsers understand your resume. "
-                    "Fixing them can boost your visibility even if your experience stays the same:"
+            # Strategic guidance
+            st.markdown("#### 📋 Application Strategy")
+            if breakdown.overall >= 80:
+                st.markdown(
+                    "• **Apply confidently** - Your resume should pass ATS filters\n"
+                    "• **Apply early** - Fresh applications get more attention\n"
+                    "• **Network** - Reach out to the hiring manager or employees on LinkedIn\n"
+                    "• **Customize further** - Tailor your summary to mention this specific company"
                 )
-                for r in breakdown.ats_reasons:
-                    st.markdown(f"- {r}")
+            elif breakdown.overall >= 60:
+                st.markdown(
+                    "• **Improve first** - Address the critical items above before applying\n"
+                    "• **Test your changes** - Re-run this analysis after making updates\n"
+                    "• **Consider applying** - If improvements bring you to 75+%, you have a decent shot\n"
+                    "• **Network** - A referral can help overcome a moderate ATS score"
+                )
             else:
-                st.write(
-                    "Your resume looks structurally ATS-friendly based on common parsing heuristics."
+                st.markdown(
+                    "• **Major revision needed** - Address all critical and high-priority items\n"
+                    "• **Assess fit** - Honestly evaluate if your background matches the role requirements\n"
+                    "• **Seek referrals** - ATS alone likely won't get you through; you need an internal advocate\n"
+                    "• **Consider similar roles** - Look for positions that better match your current experience"
                 )
 
-            st.markdown("##### 4. How to use this score strategically")
-            st.write(
-                "- **80–100**: Strong match. Tailor a few bullets, apply early, and consider reaching out to the hiring manager or recruiter.\n"
-                "- **60–79**: Decent match. Improve missing keywords/skills first, then apply.\n"
-                "- **<60**: Weak ATS match. You may still apply, but expect low visibility unless you have a strong referral or can substantially tailor your resume."
-            )
+            st.markdown("---")
+            st.caption("💡 **Pro tip:** Each 10-point improvement in your score significantly increases your chances of getting past ATS filters and landing an interview.")
 
 
 if __name__ == "__main__":
