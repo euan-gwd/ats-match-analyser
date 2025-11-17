@@ -101,7 +101,7 @@ def main() -> None:
         st.header("Job description")
         jd_mode = st.radio(
             "How do you want to provide the job description?",
-            ("Job URL", "Paste text", "Upload PDF"),
+            ("Paste text", "Job URL", "Upload PDF"),
         )
 
         jd_text_input = None
@@ -147,16 +147,11 @@ def main() -> None:
             help="Use a clean, single-column PDF exported from Word/Google Docs for best ATS parsing.",
         )
 
-        st.header("Additional sources (optional)")
+        st.header("LinkedIn profile (optional)")
         st.caption(
-            "You can provide extra documents or a public LinkedIn profile. "
-            "Content from these will be merged with your resume text for scoring and optimization, "
+            "You can provide a public LinkedIn profile URL. "
+            "Content will be merged with your resume text for scoring and optimization, "
             "but **no new facts will be invented**."
-        )
-        extra_docs = st.file_uploader(
-            "Additional supporting documents (PDFs)",
-            type=["pdf"],
-            accept_multiple_files=True,
         )
         linkedin_url_sidebar = st.text_input(
             "Public LinkedIn profile URL (optional)",
@@ -167,6 +162,10 @@ def main() -> None:
 
     # Main content area
     if analyze_button:
+        # Clear previous generation state
+        st.session_state.docx_generated = False
+        st.session_state.text_generated = False
+
         with st.spinner("Parsing documents and emulating ATS scoring..."):
             # Basic validation
             job_text = get_job_description_text(jd_mode, jd_text_input, jd_pdf_file, jd_url_input)
@@ -180,7 +179,7 @@ def main() -> None:
                 st.error("Please upload your resume as a PDF.")
                 return
 
-            # Resume + optional extra documents + LinkedIn text
+            # Resume + optional LinkedIn text
             try:
                 resume_text = extract_text_from_pdf(resume_file.read())
             except RuntimeError as e:
@@ -188,16 +187,6 @@ def main() -> None:
                 return
 
             all_text_parts = [resume_text]
-
-            # Extra PDFs
-            if extra_docs:
-                for f in extra_docs:
-                    try:
-                        extra_text = extract_text_from_pdf(f.read())
-                    except RuntimeError:
-                        continue
-                    if extra_text:
-                        all_text_parts.append(extra_text)
 
             # LinkedIn profile (best-effort, public only)
             linkedin_text = get_linkedin_profile_text(linkedin_url_sidebar.strip() or None)
@@ -208,8 +197,8 @@ def main() -> None:
 
             if not combined_resume_text or len(combined_resume_text.strip()) < 200:
                 st.warning(
-                    "The combined text from your resume and additional sources is very short or could not be fully extracted. "
-                    "ATS systems may also struggle with these files. Consider exporting simpler PDFs."
+                    "The text from your resume could not be fully extracted. "
+                    "ATS systems may also struggle with this file. Consider exporting a simpler PDF."
                 )
 
             posting_date_str = posting_date.isoformat() if posting_date else ""
@@ -219,6 +208,16 @@ def main() -> None:
                 resume_text=combined_resume_text,
                 posting_date_str=posting_date_str,
             )
+
+            # Store in session state for resume generation
+            st.session_state.job_text = job_text
+            st.session_state.combined_resume_text = combined_resume_text
+            st.session_state.breakdown = breakdown
+            st.session_state.analysis_complete = True
+
+    # Display results if analysis has been completed
+    if st.session_state.get("analysis_complete", False):
+        breakdown = st.session_state.breakdown
 
         # Layout: left = scores, right = recommendations
         left, right = st.columns([1, 1])
@@ -304,42 +303,63 @@ def main() -> None:
             col1, col2 = st.columns(2)
 
             with col1:
-                if st.button("📄 Generate Word Document (.docx)", type="primary"):
+                if st.button("📄 Generate Word Document (.docx)", type="primary", key="gen_docx"):
                     with st.spinner("Creating ATS-optimized Word document..."):
-                        docx_buffer = build_optimized_resume_docx(
-                            jd_text=job_text,
-                            resume_text=combined_resume_text,
-                            breakdown=breakdown,
-                        )
-                        st.success("✅ Optimized resume created!")
-                        st.download_button(
-                            "⬇️ Download Word Document",
-                            data=docx_buffer.getvalue(),
-                            file_name="optimized_resume_ats.docx",
-                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                        )
-                        st.info(
-                            "💡 **Tip**: Open in Microsoft Word or Google Docs to edit. "
-                            "The document is formatted for maximum ATS compatibility with clear sections and keyword emphasis."
-                        )
+                        try:
+                            docx_buffer = build_optimized_resume_docx(
+                                jd_text=st.session_state.job_text,
+                                resume_text=st.session_state.combined_resume_text,
+                                breakdown=st.session_state.breakdown,
+                            )
+                            st.session_state.docx_buffer = docx_buffer
+                            st.session_state.docx_generated = True
+                        except Exception as e:
+                            st.error(f"Error generating Word document: {str(e)}")
+                            st.session_state.docx_generated = False
+
+                if st.session_state.get("docx_generated", False):
+                    st.success("✅ Optimized resume created!")
+                    st.download_button(
+                        "⬇️ Download Word Document",
+                        data=st.session_state.docx_buffer.getvalue(),
+                        file_name="optimized_resume_ats.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        key="download_docx"
+                    )
+                    st.info(
+                        "💡 **Tip**: Open in Microsoft Word or Google Docs to edit. "
+                        "The document is formatted for maximum ATS compatibility with clear sections and keyword emphasis."
+                    )
 
             with col2:
-                if st.button("📝 Generate Text Version"):
-                    optimized_text = build_optimized_resume(
-                        jd_text=job_text,
-                        resume_text=combined_resume_text,
-                        breakdown=breakdown,
-                    )
+                if st.button("📝 Generate Text Version", key="gen_text"):
+                    with st.spinner("Generating optimized text version..."):
+                        try:
+                            optimized_text = build_optimized_resume(
+                                jd_text=st.session_state.job_text,
+                                resume_text=st.session_state.combined_resume_text,
+                                breakdown=st.session_state.breakdown,
+                            )
+                            st.session_state.optimized_text = optimized_text
+                            st.session_state.text_generated = True
+                        except Exception as e:
+                            st.error(f"Error generating text version: {str(e)}")
+                            st.session_state.text_generated = False
+
+                if st.session_state.get("text_generated", False):
+                    st.success("✅ Text version ready!")
                     st.text_area(
                         "Optimized resume draft (copy and adapt as needed)",
-                        optimized_text,
+                        st.session_state.optimized_text,
                         height=400,
+                        key="text_display"
                     )
                     st.download_button(
                         "Download as .txt",
-                        data=optimized_text,
+                        data=st.session_state.optimized_text,
                         file_name="optimized_resume.txt",
                         mime="text/plain",
+                        key="download_text"
                     )
 
 
