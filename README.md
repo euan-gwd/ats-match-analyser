@@ -23,9 +23,32 @@ The app:
 
 ---
 
-### 1. Installation
+### 1. Quick Start (Automated)
 
-From the project root:
+The easiest way to install and run the app:
+
+**macOS/Linux:**
+```bash
+./setup_and_run.sh
+```
+
+**Windows:**
+```cmd
+setup_and_run.bat
+```
+
+This script will:
+- Create a virtual environment (if it doesn't exist)
+- Install all dependencies
+- Launch the Streamlit app
+
+Then open the URL that Streamlit prints (usually `http://localhost:8501`) in your browser.
+
+---
+
+### 2. Manual Installation (Alternative)
+
+If you prefer manual setup, from the project root:
 
 ```bash
 cd "/ats match analyser"
@@ -34,17 +57,11 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
----
-
-### 2. Running the app
-
-With the virtual environment activated:
+Then run:
 
 ```bash
 streamlit run app.py
 ```
-
-Then open the URL that Streamlit prints (usually `http://localhost:8501`) in your browser.
 
 ---
 
