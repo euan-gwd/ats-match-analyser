@@ -143,6 +143,7 @@ def _analyze_resume_gaps(job_text: str, resume_text: str, missing_keywords: list
 
 def generate_actionable_steps(breakdown, job_text: str, resume_text: str, linkedin_text: str = "") -> list[dict]:
     """Generate specific, actionable changes based on actual job description and resume analysis."""
+    import re
     steps = []
 
     # Extract actual content from JD and CV
@@ -154,153 +155,214 @@ def generate_actionable_steps(breakdown, job_text: str, resume_text: str, linked
         specific_actions = []
 
         for keyword in gap_analysis['missing_critical'][:5]:
-            # Find context in JD where this keyword appears
-            import re
-            jd_lower = job_text.lower()
-            keyword_context = re.search(rf'([^.!?]*{re.escape(keyword)}[^.!?]*)[.!?]', jd_lower)
-            context_hint = keyword_context.group(1).strip()[:80] if keyword_context else ""
+            # Find full context sentence in JD
+            sentences = re.split(r'[.!?]+', job_text)
+            context_sentence = ""
+            for sent in sentences:
+                if keyword in sent.lower():
+                    context_sentence = sent.strip()[:100]
+                    break
 
-            if context_hint:
-                specific_actions.append(f'**"{keyword}"** - The JD mentions: "{context_hint}..." → Add this to your Skills section and mention it in a relevant project/role')
+            if context_sentence:
+                specific_actions.append(
+                    f'• **"{keyword}"** - JD says: "{context_sentence}..." '
+                    f'→ Add to Skills section + mention in a relevant job bullet'
+                )
             else:
-                specific_actions.append(f'**"{keyword}"** → Add to Skills section and describe where you used it')
+                specific_actions.append(f'• **"{keyword}"** → Add to Skills section + describe where you used it')
 
         steps.append({
             "priority": "🔴 CRITICAL",
             "category": "Missing Required Keywords",
-            "action": f"Add these {len(gap_analysis['missing_critical'][:5])} critical keywords from the job requirements",
+            "action": f"Add these {len(gap_analysis['missing_critical'][:5])} critical keywords",
             "details": specific_actions,
-            "impact": f"Skills Coverage: {breakdown.skills_coverage:.0f}% → ~{min(90, breakdown.skills_coverage + 25):.0f}%"
+            "impact": f"Score: {breakdown.skills_coverage:.0f}% → {min(90, breakdown.skills_coverage + 25):.0f}%"
         })
 
     # CRITICAL: LinkedIn content that should be in CV
     if gap_analysis['linkedin_additions']:
         linkedin_actions = []
-        linkedin_actions.append("🔗 **Your LinkedIn has relevant content missing from your CV:**")
 
-        for item in gap_analysis['linkedin_additions'][:5]:
+        for idx, item in enumerate(gap_analysis['linkedin_additions'][:5], 1):
             keyword = item['keyword']
             context = item['context']
-            linkedin_actions.append(f'**"{keyword}"** - Your LinkedIn mentions: "{context}" → **COPY this to your CV** (relevant to the JD)')
+            linkedin_actions.append(
+                f'{idx}. **"{keyword}"** - Your LinkedIn says: "{context}" '
+                f'→ Copy this to your CV Skills/Experience section'
+            )
 
         if len(gap_analysis['linkedin_additions']) > 5:
-            linkedin_actions.append(f"Plus {len(gap_analysis['linkedin_additions']) - 5} more keywords from your LinkedIn that match the JD")
+            linkedin_actions.append(f"...plus {len(gap_analysis['linkedin_additions']) - 5} more on your LinkedIn")
 
         steps.append({
             "priority": "🔴 CRITICAL",
-            "category": "Transfer from LinkedIn",
-            "action": "Move these relevant experiences from LinkedIn to your CV",
+            "category": "Copy from Your LinkedIn",
+            "action": "Copy these existing descriptions from your LinkedIn profile",
             "details": linkedin_actions,
-            "impact": f"Quick win - this content already exists on your profile! Could add {len(gap_analysis['linkedin_additions'])} missing keywords"
+            "impact": f"Instant add of {len(gap_analysis['linkedin_additions'])} missing keywords"
         })
 
     # CRITICAL: Mirror specific language from JD
     if breakdown.keyword_similarity < 70 and gap_analysis['key_phrases']:
         phrase_actions = []
-        for phrase in gap_analysis['key_phrases'][:4]:
-            phrase_actions.append(f'Use phrase: **"{phrase}"** (appears multiple times in JD but missing in your resume)')
 
         if jd_analysis['role_title']:
-            phrase_actions.insert(0, f'Start your summary with: "**{jd_analysis["role_title"]}** with expertise in..." matching the exact job title')
+            phrase_actions.append(
+                f'• **Line 1 of CV**: Change to "{jd_analysis["role_title"]} with [X] years in [top 3 skills]"'
+            )
+
+        for phrase in gap_analysis['key_phrases'][:3]:
+            # Find where this phrase appears in JD
+            sentences = re.split(r'[.!?]+', job_text)
+            phrase_context = ""
+            for sent in sentences:
+                if phrase in sent.lower():
+                    phrase_context = sent.strip()[:100]
+                    break
+
+            if phrase_context:
+                phrase_actions.append(
+                    f'• Use **"{phrase}"**: JD says "{phrase_context}..." '
+                    f'→ Add this phrase in 2-3 Experience bullets'
+                )
+            else:
+                phrase_actions.append(f'• Use phrase **"{phrase}"** → Add in Experience bullets')
 
         steps.append({
             "priority": "🔴 CRITICAL",
-            "category": "Language Alignment",
-            "action": "Mirror these exact phrases from the job description",
+            "category": "Use JD's Exact Language",
+            "action": "Replace your words with these exact JD phrases",
             "details": phrase_actions,
-            "impact": f"Keyword Relevance: {breakdown.keyword_similarity:.0f}% → ~{min(90, breakdown.keyword_similarity + 20):.0f}%"
+            "impact": f"Score: {breakdown.keyword_similarity:.0f}% → {min(90, breakdown.keyword_similarity + 20):.0f}%"
         })
 
     # HIGH: Add/improve professional summary
     if not gap_analysis['has_summary'] or breakdown.keyword_similarity < 75:
         summary_bullets = []
-        if jd_analysis['role_title']:
-            summary_bullets.append(f'Add opening: "**{jd_analysis["role_title"]}** with [X] years of experience in [top 3 skills from JD]"')
-        if jd_analysis['required_years']:
-            summary_bullets.append(f'Explicitly state: "**{jd_analysis["required_years"]}+ years** of hands-on experience" (the JD requires this)')
-
-        # Add top 3 missing keywords to summary recommendation
-        if breakdown.missing_keywords[:3]:
-            summary_bullets.append(f'Include these keywords: **{", ".join(breakdown.missing_keywords[:3])}**')
 
         if not gap_analysis['has_summary']:
-            summary_bullets.insert(0, '**CREATE a Professional Summary** section at the top of your resume (currently missing)')
+            summary_bullets.append('❌ **MISSING: Professional Summary at top of CV**')
+
+        # Build the template
+        template_parts = []
+        if jd_analysis['role_title']:
+            template_parts.append(f"{jd_analysis['role_title']}")
+        else:
+            template_parts.append("[Role from JD]")
+
+        if jd_analysis['required_years']:
+            template_parts.append(f"with {jd_analysis['required_years']}+ years")
+        else:
+            template_parts.append("with [X] years")
+
+        if breakdown.missing_keywords[:3]:
+            template_parts.append(f"in {', '.join(breakdown.missing_keywords[:3])}")
+
+        template = " ".join(template_parts) + ". [One achievement]. [One goal from JD]."
+
+        summary_bullets.append(f'**Copy this template**: "{template}"')
+
+        if jd_analysis['required_years']:
+            summary_bullets.append(f'⚠️ Must state "{jd_analysis["required_years"]}+ years" - JD requires it')
 
         steps.append({
             "priority": "🟡 HIGH",
             "category": "Professional Summary",
-            "action": "Add/rewrite your professional summary to match job requirements",
-            "details": summary_bullets if summary_bullets else ["Rewrite summary to include top keywords and exact role title"],
-            "impact": "Immediate ATS ranking boost - summary is scanned first"
+            "action": "Add summary as first section (right after name/contact)",
+            "details": summary_bullets,
+            "impact": "Summary read first by ATS - 15-20% of total score"
         })
 
     # HIGH: ATS formatting issues
     if breakdown.ats_friendliness < 80 and breakdown.ats_reasons:
+        format_actions = []
+        for reason in breakdown.ats_reasons:
+            if "short" in reason.lower() or "long" in reason.lower():
+                format_actions.append(f'• {reason} → Aim for 2 pages, 3-4 bullets per job')
+            elif "column" in reason.lower() or "layout" in reason.lower():
+                format_actions.append(f'• {reason} → Use single-column, save as PDF from Word/Docs')
+            elif "header" in reason.lower() or "section" in reason.lower():
+                format_actions.append(f'• {reason} → Add bold headings: Summary, Experience, Education, Skills')
+            else:
+                format_actions.append(f'• {reason}')
+
         steps.append({
             "priority": "🟡 HIGH",
-            "category": "ATS Formatting",
-            "action": "Fix these formatting issues blocking ATS parsing",
-            "details": [f"**FIX:** {reason}" for reason in breakdown.ats_reasons],
-            "impact": f"ATS-Friendliness: {breakdown.ats_friendliness:.0f}% → ~95%"
+            "category": "ATS Format Issues",
+            "action": "Fix formatting so ATS can parse your CV",
+            "details": format_actions,
+            "impact": f"Score: {breakdown.ats_friendliness:.0f}% → 95%"
         })
 
     # HIGH: Quantify achievements
     if not gap_analysis['has_metrics']:
-        metrics_actions = [
-            "**REWRITE** at least 3 bullet points with numbers: '% improvement', '$ saved', '# of users', 'team size'",
-            "Example: Change 'Led development projects' → 'Led **5-person team** delivering **3 major projects**, improving efficiency by **40%**'",
-            "Example: Change 'Improved system performance' → 'Optimized database queries, reducing load time by **60%** for **10K+ daily users**'",
-        ]
+        metrics_actions = []
 
         if gap_analysis.get('linkedin_has_metrics'):
-            metrics_actions.insert(0, "🔗 **Your LinkedIn profile has quantified achievements - transfer those metrics to your CV!**")
+            metrics_actions.append('🔗 Your LinkedIn has numbers - copy those bullets to CV!')
+
+        # Find a verb from their resume
+        cv_verbs = re.findall(r'\b(Led|Managed|Developed|Improved|Increased|Reduced|Created|Built|Designed|Implemented)\b', resume_text, re.IGNORECASE)
+        verb = cv_verbs[0] if cv_verbs else "Led"
+
+        metrics_actions.extend([
+            f'• ❌ "{verb} projects" → ✅ "{verb} **5-person team** on **3 projects** over **18 months**"',
+            f'• ❌ "Improved performance" → ✅ "Improved performance by **60%** for **10K+ users**"',
+            f'• ❌ "Reduced costs" → ✅ "Reduced costs by **$50K annually**"',
+            '→ Add numbers to 3+ bullets: team size, %, $, time, users impacted'
+        ])
 
         steps.append({
             "priority": "🟡 HIGH",
-            "category": "Quantified Impact",
-            "action": "Add metrics to your achievements (currently missing)",
+            "category": "Add Numbers",
+            "action": "Quantify 3+ achievements with %, $, or team size",
             "details": metrics_actions,
-            "impact": "Major boost - quantified achievements score 3x higher in ATS ranking"
+            "impact": "Quantified bullets score 3X higher - worth 20-25%"
         })
 
     # MEDIUM: Seniority alignment
     if breakdown.seniority_alignment < 80:
-        seniority_actions = [breakdown.seniority_explanation]
+        seniority_actions = [f'⚠️ {breakdown.seniority_explanation}']
 
         if jd_analysis['required_years']:
-            years_statement = f'Add to summary: "**{jd_analysis["required_years"]}+ years** of [field] experience"'
-            seniority_actions.append(years_statement)
+            seniority_actions.append(
+                f'• Add to Line 1: "{jd_analysis["required_years"]}+ years of experience in [field]"'
+            )
 
-        # Check if using action verbs appropriate for seniority
         jd_lower = job_text.lower()
-        if any(word in jd_lower for word in ['lead', 'senior', 'principal']):
-            seniority_actions.append('**USE** senior-level action verbs: "Architected", "Led", "Mentored", "Drove", "Established"')
-            seniority_actions.append('**QUANTIFY** scope: team sizes, budget responsibility, strategic impact')
+        if any(word in jd_lower for word in ['lead', 'senior', 'principal', 'architect']):
+            seniority_actions.append(
+                '• Replace weak verbs: "Helped"→"Architected", "Assisted"→"Led", "Supported"→"Drove"'
+            )
+            seniority_actions.append(
+                '• Add leadership: "Mentored 4 developers", "Led team of 8", "Managed $500K budget"'
+            )
 
         steps.append({
             "priority": "🟡 MEDIUM",
-            "category": "Seniority Match",
-            "action": "Adjust seniority signals",
+            "category": "Seniority Signals",
+            "action": "Match the seniority level this job requires",
             "details": seniority_actions,
-            "impact": f"Seniority Alignment: {breakdown.seniority_alignment:.0f}% → ~{min(95, breakdown.seniority_alignment + 15):.0f}%"
+            "impact": f"Score: {breakdown.seniority_alignment:.0f}% → {min(95, breakdown.seniority_alignment + 15):.0f}%"
         })
 
-    # OPTIMIZATION: Already strong - fine-tune
+    # OPTIMIZATION: Already strong
     if breakdown.skills_coverage >= 70 and breakdown.keyword_similarity >= 70:
         optimize_actions = [
-            f"**ADD** these additional matched keywords throughout: {', '.join(breakdown.matched_keywords[:5])}",
-            "**REORDER** your experience - put most relevant role first, even if not most recent",
+            f'✅ Strong resume ({breakdown.overall:.0f}/100)! Polish:',
+            f'• Repeat these keywords 2-3x: {", ".join(breakdown.matched_keywords[:5])}',
+            '• Reorder: Put most relevant job first (doesn\'t have to be most recent)',
         ]
 
         if breakdown.missing_keywords[5:10]:
-            optimize_actions.append(f'**INCLUDE** secondary keywords: {", ".join(breakdown.missing_keywords[5:10])}')
+            optimize_actions.append(f'• Add if true: {", ".join(breakdown.missing_keywords[5:10])}')
 
         steps.append({
             "priority": "🟢 OPTIMIZE",
-            "category": "Fine-Tuning",
-            "action": "Polish your strong resume further",
+            "category": "Final Polish",
+            "action": "Fine-tune your strong resume",
             "details": optimize_actions,
-            "impact": f"Push from {breakdown.overall:.0f} → 90+ score"
+            "impact": f"{breakdown.overall:.0f} → 90-95 score"
         })
 
     return steps
