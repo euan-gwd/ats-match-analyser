@@ -65,7 +65,34 @@ streamlit run app.py
 
 ---
 
-### 3. How the scoring works (high level)
+### 3. Running Tests
+
+This project includes comprehensive unit tests to ensure reliability.
+
+**Run all tests:**
+```bash
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pytest
+```
+
+**Run tests with coverage report:**
+```bash
+pytest --cov=. --cov-report=term --cov-report=html
+```
+
+**View HTML coverage report:**
+```bash
+open htmlcov/index.html  # On macOS
+# Or navigate to htmlcov/index.html in your browser
+```
+
+**Test Coverage:** 85%+ (core business logic covered)
+
+For more details on testing, see [TESTING.md](TESTING.md).
+
+---
+
+### 4. How the scoring works (high level)
 
 The scoring engine currently considers:
 
@@ -90,7 +117,7 @@ The final score combines these factors into a **0–100 score** with configurabl
 
 ---
 
-### 4. Limitations
+### 5. Limitations
 
 - This app does **not** integrate with any proprietary ATS.
 - PDF parsing quality depends on how the PDF was generated. Exporting from Word/Google Docs usually works best.
@@ -98,7 +125,7 @@ The final score combines these factors into a **0–100 score** with configurabl
 
 ---
 
-### 5. Future improvements
+### 6. Future improvements
 
 Potential extensions:
 

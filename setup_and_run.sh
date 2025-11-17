@@ -31,8 +31,8 @@ VENV_PYTHON=".venv/bin/python"
 
 # Install/upgrade dependencies
 echo "📥 Installing dependencies..."
-$VENV_PYTHON -m pip install --upgrade pip --quiet
-$VENV_PYTHON -m pip install -r requirements.txt --quiet
+$VENV_PYTHON -m pip install --upgrade pip
+$VENV_PYTHON -m pip install -r requirements.txt
 
 echo "✅ Dependencies installed"
 echo ""
