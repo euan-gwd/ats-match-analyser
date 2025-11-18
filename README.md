@@ -1,136 +1,166 @@
-## ATS Match Analyzer
+# ATS Match Analyser
 
-This app emulates key behaviors of modern Applicant Tracking Systems (ATS) to help you understand **how well your resume matches a specific job** and how likely it is to surface to a recruiter.
+AI-powered CV optimization tool with React frontend and FastAPI backend.
 
-You can:
-- **Provide a job description** via:
-  - Pasting text
-  - Uploading a PDF
-  - Supplying a job URL
-- **Provide the posting date** of the job
-- **Upload your resume/CV** as a PDF
+## Architecture
 
-The app:
-- Parses the job description and your resume
-- Applies ATS-like processing (keyword extraction, skills coverage, formatting checks, and relevance scoring)
-- Produces:
-  - An **overall match score (0–100)** as if you were the recruiter searching in an ATS
-  - **Sub-scores** (keyword relevance, skills coverage, seniority alignment, ATS-friendliness)
-  - **Concrete recommendations** on how to improve your resume for that specific job
+- **Frontend**: Vite + React + Tailwind CSS
+- **Backend**: FastAPI + Python
+- **Features**: ATS scoring, keyword analysis, actionable recommendations, GDPR compliance
 
-> Note: Real ATS products (Workday, Taleo, Greenhouse, Lever, etc.) each have proprietary algorithms.
-> This app approximates widely documented patterns: heavy keyword/skills weighting, field-aware parsing, and basic formatting checks that influence whether a resume is surfaced to recruiters.
+## Quick Start
 
----
-
-### 1. Quick Start (Automated)
-
-The easiest way to install and run the app:
-
-**macOS/Linux:**
-```bash
-./setup_and_run.sh
-```
-
-**Windows:**
-```cmd
-setup_and_run.bat
-```
-
-This script will:
-- Create a virtual environment (if it doesn't exist)
-- Install all dependencies
-- Launch the Streamlit app
-
-Then open the URL that Streamlit prints (usually `http://localhost:8501`) in your browser.
-
----
-
-### 2. Manual Installation (Alternative)
-
-If you prefer manual setup, from the project root:
+### Backend Setup
 
 ```bash
-cd "/ats match analyser"
-python3 -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+cd backend
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
+python -m app.main
 ```
 
-Then run:
+Backend runs on: http://localhost:8000
+
+### Frontend Setup
 
 ```bash
-streamlit run app.py
+cd frontend
+npm install
+npm run dev
 ```
 
----
+Frontend runs on: http://localhost:5173
 
-### 3. Running Tests
+## Project Structure
 
-This project includes comprehensive unit tests to ensure reliability.
+```
+.
+├── backend/
+│   ├── app/
+│   │   ├── main.py              # FastAPI application
+│   │   ├── api/                 # API routes
+│   │   └── core/                # Core modules
+│   │       ├── ats_scoring.py
+│   │       ├── resume_optimizer.py
+│   │       ├── security_utils.py
+│   │       └── gdpr_compliance.py
+│   └── requirements.txt
+│
+├── frontend/
+│   ├── src/
+│   │   ├── App.jsx              # Main app component
+│   │   ├── components/
+│   │   │   ├── ConsentBanner.jsx
+│   │   │   ├── UploadForm.jsx
+│   │   │   └── Results.jsx
+│   │   └── index.css            # Tailwind styles
+│   ├── package.json
+│   └── tailwind.config.js
+│
+└── README.md
+```
 
-**Run all tests:**
+## API Endpoints
+
+### `POST /api/analyze`
+Analyze CV against job description
+- **Body**: `multipart/form-data`
+  - `cv_file`: PDF file
+  - `job_description`: Text (optional if job_url provided)
+  - `job_url`: URL (optional if job_description provided)
+  - `linkedin_url`: URL (optional)
+  - `session_id`: String
+
+**Response**:
+```json
+{
+  "overall": 75.5,
+  "keyword_similarity": 68.0,
+  "skills_coverage": 82.0,
+  "seniority_alignment": 90.0,
+  "ats_friendliness": 75.0,
+  "matched_keywords": ["python", "react", ...],
+  "missing_keywords": ["kubernetes", ...],
+  "seniority_explanation": "...",
+  "actionable_steps": [...]
+}
+```
+
+### `GET /api/privacy-notice`
+Get GDPR privacy notice
+
+### `POST /api/consent`
+Record user consent
+
+## Features
+
+### ✨ CV Analysis
+- Keyword matching with TF-IDF
+- Skills coverage assessment
+- Seniority level alignment
+- ATS format compliance
+
+### 🎯 Actionable Recommendations
+- Ultra-clear step-by-step instructions
+- Before/after examples
+- LinkedIn content integration
+- Prioritized by impact
+
+### 🔒 Security & GDPR
+- Input validation & sanitization
+- PII scrubbing from logs
+- Rate limiting
+- Session management
+- No persistent data storage
+- GDPR consent tracking
+
+## Development
+
+### Run Tests
 ```bash
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+cd backend
 pytest
 ```
 
-**Run tests with coverage report:**
+### Frontend Dev with Hot Reload
 ```bash
-pytest --cov=. --cov-report=term --cov-report=html
+cd frontend
+npm run dev
 ```
 
-**View HTML coverage report:**
+### Backend Dev with Auto-reload
 ```bash
-open htmlcov/index.html  # On macOS
-# Or navigate to htmlcov/index.html in your browser
+cd backend
+uvicorn app.main:app --reload
 ```
 
-**Test Coverage:** 85%+ (core business logic covered)
+## Deployment
 
-For more details on testing, see [TESTING.md](TESTING.md).
+### Backend
+- Use `uvicorn` with Gunicorn for production
+- Set CORS origins to your frontend domain
+- Enable HTTPS
+- Configure rate limiting
 
----
+### Frontend
+```bash
+cd frontend
+npm run build
+```
+Serve `dist/` folder with nginx or CDN
 
-### 4. How the scoring works (high level)
+## Environment Variables
 
-The scoring engine currently considers:
+Create `.env` file in backend/:
+```
+ENVIRONMENT=production
+ALLOWED_ORIGINS=https://yourdomain.com
+MAX_FILE_SIZE_MB=5
+RATE_LIMIT_REQUESTS=10
+RATE_LIMIT_WINDOW_SECONDS=60
+```
 
-- **Keyword & phrase relevance**
-  - TF-IDF + cosine similarity between job description and resume
-  - Coverage of the most important job-specific keywords and phrases
-- **Skills coverage**
-  - Matches against a curated list of common technical and business skills
-  - Weighs skills mentioned explicitly in the job description more heavily
-- **Seniority alignment**
-  - Looks at signals like “Senior”, “Lead”, “Manager”, “Junior”, and years of experience
-  - Penalizes large mismatches (e.g., junior resume vs. senior role)
-- **ATS-friendliness / formatting**
-  - Checks for things that commonly break ATS parsing:
-    - Overuse of tables/columns (approximated via irregular whitespace patterns)
-    - Extremely dense or extremely short resumes
-    - Missing standard section headings (Experience, Education, Skills, etc.)
-- **Posting date awareness**
-  - Uses the posting date to sanity-check experience recency and identify if the role is likely still “hot”
+## License
 
-The final score combines these factors into a **0–100 score** with configurable weights, plus human-friendly explanations.
-
----
-
-### 5. Limitations
-
-- This app does **not** integrate with any proprietary ATS.
-- PDF parsing quality depends on how the PDF was generated. Exporting from Word/Google Docs usually works best.
-- For highly non-standard resumes (heavy graphics, multi-column designs), any ATS—including this approximation—may mis-parse content.
-
----
-
-### 6. Future improvements
-
-Potential extensions:
-
-- Use a larger skills ontology (e.g., ESCO / O*NET) to detect more nuanced skills
-- Add language detection and multi-language support
-- Model-specific emulations (e.g., “score as if this was Workday vs. Lever”)
-
-
+MIT

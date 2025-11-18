@@ -41,8 +41,14 @@ htmlcov/
 *~
 .DS_Store
 
-# Streamlit
-.streamlit/
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Backend
+backend/venv/
+backend/__pycache__/
 
 # Other
 *.log
