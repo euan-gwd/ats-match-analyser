@@ -23,80 +23,140 @@ SECTION_HEADERS = [
     "profile",
 ]
 
-COMMON_SKILLS = [
-    # Technical / software
-    "python",
-    "java",
-    "javascript",
-    "typescript",
-    "c++",
-    "c#",
-    "react",
-    "angular",
-    "vue",
-    "node",
-    "node.js",
-    "django",
-    "flask",
-    "spring",
-    "kotlin",
-    "swift",
-    "sql",
-    "nosql",
-    "postgresql",
-    "mysql",
-    "mongodb",
-    "redis",
-    "graphql",
-    "rest",
-    "docker",
-    "kubernetes",
-    "aws",
-    "azure",
-    "gcp",
-    "terraform",
-    "ansible",
-    "linux",
-    "git",
-    "ci/cd",
-    "jenkins",
-    "circleci",
-    "pytest",
-    "unit testing",
-    "integration testing",
-    # Data / analytics
-    "pandas",
-    "numpy",
-    "scikit-learn",
-    "machine learning",
-    "deep learning",
-    "data analysis",
-    "data science",
-    "power bi",
-    "tableau",
-    "excel",
-    "statistics",
-    # Business / soft skills
-    "project management",
-    "product management",
-    "stakeholder management",
-    "communication",
-    "leadership",
-    "mentoring",
-    "teamwork",
-    "collaboration",
-    "agile",
-    "scrum",
-    "kanban",
-]
+# Comprehensive skill taxonomy like real ATS systems (Workday, Greenhouse, Lever)
+SKILL_TAXONOMY = {
+    # Programming Languages
+    "programming_languages": {
+        "python": ["python", "py", "python3"],
+        "javascript": ["javascript", "js", "es6", "es2015", "ecmascript"],
+        "typescript": ["typescript", "ts"],
+        "java": ["java", "jdk", "jvm"],
+        "c++": ["c++", "cpp", "c plus plus"],
+        "c#": ["c#", "csharp", "c sharp", ".net"],
+        "ruby": ["ruby", "rb"],
+        "go": ["golang", "go lang"],
+        "rust": ["rust"],
+        "swift": ["swift", "swiftui"],
+        "kotlin": ["kotlin"],
+        "php": ["php"],
+        "scala": ["scala"],
+        "r": ["r programming", "r language"],
+    },
+
+    # Frontend Frameworks
+    "frontend": {
+        "react": ["react", "react.js", "reactjs", "react native"],
+        "angular": ["angular", "angularjs", "angular.js"],
+        "vue": ["vue", "vue.js", "vuejs"],
+        "svelte": ["svelte", "sveltekit"],
+        "nextjs": ["next.js", "nextjs", "next js"],
+        "html/css": ["html", "css", "html5", "css3", "sass", "scss", "less"],
+        "webpack": ["webpack", "bundler"],
+        "vite": ["vite"],
+    },
+
+    # Backend Frameworks
+    "backend": {
+        "node": ["node", "node.js", "nodejs", "express", "express.js"],
+        "django": ["django", "django rest framework", "drf"],
+        "flask": ["flask"],
+        "fastapi": ["fastapi", "fast api"],
+        "spring": ["spring", "spring boot", "spring framework"],
+        "rails": ["rails", "ruby on rails", "ror"],
+        "laravel": ["laravel"],
+        "asp.net": ["asp.net", "asp", ".net core"],
+    },
+
+    # Databases
+    "databases": {
+        "sql": ["sql", "structured query language"],
+        "postgresql": ["postgresql", "postgres", "psql"],
+        "mysql": ["mysql"],
+        "mongodb": ["mongodb", "mongo"],
+        "redis": ["redis", "redis cache"],
+        "elasticsearch": ["elasticsearch", "elastic search", "elk"],
+        "dynamodb": ["dynamodb", "dynamo"],
+        "cassandra": ["cassandra"],
+        "oracle": ["oracle db", "oracle database"],
+    },
+
+    # Cloud & DevOps
+    "cloud_devops": {
+        "aws": ["aws", "amazon web services", "ec2", "s3", "lambda", "cloudformation"],
+        "azure": ["azure", "microsoft azure"],
+        "gcp": ["gcp", "google cloud", "google cloud platform"],
+        "docker": ["docker", "containerization"],
+        "kubernetes": ["kubernetes", "k8s", "container orchestration"],
+        "terraform": ["terraform", "infrastructure as code", "iac"],
+        "ansible": ["ansible"],
+        "jenkins": ["jenkins"],
+        "github actions": ["github actions", "gh actions"],
+        "ci/cd": ["ci/cd", "continuous integration", "continuous deployment", "cicd"],
+    },
+
+    # Data Science & ML
+    "data_ml": {
+        "machine learning": ["machine learning", "ml", "deep learning", "neural networks"],
+        "tensorflow": ["tensorflow", "tf"],
+        "pytorch": ["pytorch", "torch"],
+        "scikit-learn": ["scikit-learn", "sklearn", "scikit learn"],
+        "pandas": ["pandas"],
+        "numpy": ["numpy"],
+        "data analysis": ["data analysis", "data analytics"],
+        "data science": ["data science"],
+        "ai": ["artificial intelligence", "ai"],
+        "nlp": ["nlp", "natural language processing"],
+        "computer vision": ["computer vision", "cv", "image processing"],
+    },
+
+    # Testing & Quality
+    "testing": {
+        "unit testing": ["unit test", "unit testing", "tdd", "test driven"],
+        "integration testing": ["integration test", "integration testing"],
+        "e2e testing": ["e2e", "end to end", "selenium", "cypress", "playwright"],
+        "pytest": ["pytest"],
+        "jest": ["jest"],
+        "mocha": ["mocha"],
+    },
+
+    # Methodologies
+    "methodologies": {
+        "agile": ["agile", "agile methodology", "agile development"],
+        "scrum": ["scrum", "scrum master", "sprint"],
+        "kanban": ["kanban"],
+        "devops": ["devops", "dev ops"],
+        "microservices": ["microservices", "microservice architecture"],
+        "rest api": ["rest", "rest api", "restful", "rest apis"],
+        "graphql": ["graphql", "graph ql"],
+    },
+
+    # Soft Skills
+    "soft_skills": {
+        "leadership": ["leadership", "lead", "leading teams", "team lead"],
+        "communication": ["communication", "stakeholder management", "presentation"],
+        "collaboration": ["collaboration", "teamwork", "cross-functional"],
+        "mentoring": ["mentoring", "coaching", "training"],
+        "project management": ["project management", "pm", "program management"],
+        "product management": ["product management", "product owner", "roadmap"],
+    }
+}
+
+# Flatten for quick lookups
+ALL_KNOWN_SKILLS = {}
+SKILL_SYNONYMS = {}
+for category, skills_dict in SKILL_TAXONOMY.items():
+    for primary_skill, variants in skills_dict.items():
+        ALL_KNOWN_SKILLS[primary_skill] = category
+        for variant in variants:
+            SKILL_SYNONYMS[variant.lower()] = primary_skill
 
 SENIORITY_KEYWORDS = {
     "intern": ["intern", "internship"],
-    "junior": ["junior", "entry level", "graduate"],
-    "mid": ["mid-level", "mid level"],
-    "senior": ["senior", "sr.", "sr ", "staff"],
-    "lead": ["lead", "principal"],
-    "manager": ["manager", "head of", "director"],
+    "junior": ["junior", "entry level", "entry-level", "graduate", "associate"],
+    "mid": ["mid-level", "mid level", "intermediate"],
+    "senior": ["senior", "sr.", "sr ", "staff", "principal"],
+    "lead": ["lead", "tech lead", "team lead", "engineering lead"],
+    "manager": ["manager", "head of", "director", "vp", "chief"],
 }
 
 
@@ -109,26 +169,179 @@ def _normalize(text: str) -> str:
 
 def _extract_keywords(text: str, top_k: int = 30) -> List[str]:
     """
-    Rough keyword extraction using TF-IDF on a single document.
+    Extract meaningful skills and keywords using semantic matching against skill taxonomy.
+    Works like real ATS platforms (Workday, Greenhouse, Lever) - not just TF-IDF word frequency.
     """
-    normalized = _normalize(text)
-    if not normalized:
+    if not text or len(text.strip()) < 10:
         return []
 
-    vectorizer = TfidfVectorizer(
-        stop_words="english",
-        ngram_range=(1, 2),
-        max_features=256,
-    )
-    try:
-        tfidf_matrix = vectorizer.fit_transform([normalized])
-    except ValueError:
-        return []
+    text_lower = text.lower()
 
-    scores = tfidf_matrix.toarray()[0]
-    indices = np.argsort(scores)[::-1][:top_k]
-    feature_names = np.array(vectorizer.get_feature_names_out())
-    return [feature_names[i] for i in indices if scores[i] > 0]
+    # Extract section-specific content (weight Skills section higher)
+    skills_section_text = _extract_section_text(text_lower, ["skills", "technical skills"])
+    requirements_text = _extract_requirements_text(text_lower)
+
+    matched_skills = set()
+
+    # 1. Match against known skill taxonomy (primary method)
+    for variant, primary_skill in SKILL_SYNONYMS.items():
+        # Only match if variant is long enough or is a known abbreviation
+        if len(variant) < 2:
+            continue
+
+        # Check in skills section first (highest priority)
+        if variant in skills_section_text and _is_distinct_match(skills_section_text, variant):
+            matched_skills.add(primary_skill)
+        # Then check requirements sections
+        elif variant in requirements_text and _is_distinct_match(requirements_text, variant):
+            matched_skills.add(primary_skill)
+        # Finally check full text
+        elif variant in text_lower and _is_distinct_match(text_lower, variant):
+            matched_skills.add(primary_skill)
+
+    # 2. Extract years of experience requirements
+    experience_keywords = _extract_experience_keywords(text_lower)
+    matched_skills.update(experience_keywords)
+
+    # 3. Extract degree requirements
+    degree_keywords = _extract_degree_keywords(text_lower)
+    matched_skills.update(degree_keywords)
+
+    # 4. Extract version-specific technologies (Python 3.x, React 18, etc.)
+    version_keywords = _extract_versioned_tech(text_lower)
+    matched_skills.update(version_keywords)
+
+    return list(matched_skills)[:top_k]
+
+
+def _extract_section_text(text: str, section_names: List[str]) -> str:
+    """
+    Extract text from specific sections (Skills, Education, etc.).
+    Real ATS systems parse resumes by section and weight them differently.
+    """
+    section_text = ""
+    for section_name in section_names:
+        # Find section header
+        patterns = [
+            f"{section_name}:",
+            f"{section_name}\n",
+            f"## {section_name}",
+            f"**{section_name}**",
+        ]
+
+        for pattern in patterns:
+            if pattern in text:
+                start_idx = text.index(pattern) + len(pattern)
+                # Extract until next section or 500 chars
+                next_section_idx = len(text)
+                for header in SECTION_HEADERS:
+                    try:
+                        idx = text.index(f"\n{header}", start_idx)
+                        next_section_idx = min(next_section_idx, idx)
+                    except ValueError:
+                        continue
+
+                section_text += text[start_idx:min(start_idx + 500, next_section_idx)]
+                break
+
+    return section_text
+
+
+def _extract_requirements_text(text: str) -> str:
+    """
+    Extract text from requirement sections (Required:, Qualifications:, etc.).
+    Real ATS prioritizes these sections heavily.
+    """
+    requirement_markers = [
+        "required qualifications",
+        "required skills",
+        "requirements:",
+        "qualifications:",
+        "what you'll need",
+        "must have",
+        "you must have",
+    ]
+
+    requirements_text = ""
+    for marker in requirement_markers:
+        if marker in text:
+            start_idx = text.index(marker)
+            # Extract next 1000 chars
+            requirements_text += text[start_idx:start_idx + 1000]
+
+    return requirements_text
+
+
+def _is_distinct_match(text: str, keyword: str) -> bool:
+    """
+    Check if keyword appears as a distinct word, not part of another word.
+    Example: "python" should match "python development" but not "pythonic"
+    """
+    # Word boundary pattern
+    pattern = r'\b' + re.escape(keyword) + r'\b'
+    return bool(re.search(pattern, text))
+
+
+def _extract_experience_keywords(text: str) -> Set[str]:
+    """
+    Extract years of experience requirements.
+    Example: "5+ years Python" -> "5+ years experience"
+    """
+    experience_keywords = set()
+
+    patterns = [
+        r'(\d+)\+?\s*years?\s+(?:of\s+)?experience',
+        r'(\d+)\+?\s*years?\s+(?:in|with|using)\s+\w+',
+        r'minimum\s+(\d+)\s+years?',
+    ]
+
+    for pattern in patterns:
+        matches = re.findall(pattern, text)
+        for match in matches:
+            experience_keywords.add(f"{match}+ years experience")
+
+    return experience_keywords
+
+
+def _extract_degree_keywords(text: str) -> Set[str]:
+    """
+    Extract degree requirements (BS, MS, PhD).
+    """
+    degree_keywords = set()
+
+    degree_patterns = {
+        "bachelor": ["bachelor", "bs", "b.s.", "ba", "b.a.", "undergraduate"],
+        "master": ["master", "ms", "m.s.", "ma", "m.a.", "mba", "graduate"],
+        "phd": ["phd", "ph.d.", "doctorate", "doctoral"],
+    }
+
+    for degree, variants in degree_patterns.items():
+        for variant in variants:
+            if variant in text:
+                degree_keywords.add(f"{degree} degree")
+                break
+
+    return degree_keywords
+
+
+def _extract_versioned_tech(text: str) -> Set[str]:
+    """
+    Extract version-specific technologies (Python 3.x, React 18, AWS S3, etc.).
+    """
+    versioned = set()
+
+    # Pattern: technology name followed by version number
+    patterns = [
+        r'(python|java|node|react|angular|vue)\s+\d+\.?\d*',
+        r'(aws|azure|gcp)\s+[a-z0-9]+',  # AWS S3, Azure Blob, etc.
+    ]
+
+    for pattern in patterns:
+        matches = re.findall(pattern, text, re.IGNORECASE)
+        for match in matches:
+            versioned.add(match.lower())
+
+    return versioned
 
 
 def _cosine_similarity(jd_text: str, resume_text: str) -> float:
@@ -148,35 +361,32 @@ def _cosine_similarity(jd_text: str, resume_text: str) -> float:
 
 
 def _skills_coverage(jd_text: str, resume_text: str) -> Tuple[float, List[str], List[str]]:
+    """
+    Calculate skills coverage using semantic matching against skill taxonomy.
+    Real ATS systems match skills semantically, not just by exact text match.
+    """
     jd = _normalize(jd_text)
     cv = _normalize(resume_text)
     if not jd or not cv:
         return 0.0, [], []
 
-    jd_tokens = set(re.findall(r"[a-zA-Z\+\#\.]{2,}", jd))
-    cv_tokens = set(re.findall(r"[a-zA-Z\+\#\.]{2,}", cv))
+    # Extract skills from job description using semantic matching
+    jd_skills = set(_extract_keywords(jd_text, top_k=50))
 
-    jd_skills = {s for s in COMMON_SKILLS if any(tok in jd for tok in s.split())}
-    cv_skills = {s for s in COMMON_SKILLS if any(tok in cv for tok in s.split())}
+    # Extract skills from resume using semantic matching
+    cv_skills = set(_extract_keywords(resume_text, top_k=50))
 
-    # Also consider any JD tokens that appear multiple times as "implicit" skills
-    important_jd_terms = set(_extract_keywords(jd_text, top_k=40))
+    # Find matched and missing skills
+    matched = jd_skills & cv_skills
+    missing = jd_skills - cv_skills
 
-    matched_from_skills = jd_skills & cv_skills
-    matched_from_terms = {t for t in important_jd_terms if t in cv}
-
-    # Required set is union of explicit skills and important terms
-    required = jd_skills | important_jd_terms
-    if not required:
+    # Calculate coverage score
+    if not jd_skills:
         return 0.0, [], []
 
-    matched = (matched_from_skills | matched_from_terms) & required
-    coverage = len(matched) / len(required)
+    coverage_score = len(matched) / len(jd_skills)
 
-    missing = sorted(list(required - matched))
-    matched_list = sorted(list(matched))
-
-    return float(coverage), matched_list, missing
+    return coverage_score, list(matched), list(missing)
 
 
 def _detect_seniority(text: str) -> str:

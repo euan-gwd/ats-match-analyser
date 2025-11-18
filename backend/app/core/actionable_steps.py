@@ -1,6 +1,62 @@
 """Generate actionable improvement steps from ATS analysis."""
 import re
-from typing import List, Dict
+from typing import List, Dict, Set
+
+
+def _is_meaningful_keyword(keyword: str) -> bool:
+    """Filter out noise words and fragments."""
+    # Remove single words under 3 chars, common words, fragments
+    if len(keyword) < 3:
+        return False
+
+    noise_words = {
+        'the', 'and', 'for', 'with', 'you', 'this', 'that', 'from', 'have', 'will',
+        'are', 'was', 'were', 'been', 'has', 'had', 'can', 'could', 'should', 'would',
+        'our', 'your', 'their', 'about', 'into', 'through', 'during', 'before', 'after',
+        'need', 'says', 'app', 'run', 'enable', 'says', 'need to', 'you need'
+    }
+
+    keyword_lower = keyword.lower().strip()
+
+    # Skip noise words
+    if keyword_lower in noise_words:
+        return False
+
+    # Skip fragments that look like error messages or UI text
+    if any(x in keyword_lower for x in ['you need to', 'click', 'press', 'error', 'warning']):
+        return False
+
+    # Must contain at least one letter
+    if not re.search(r'[a-zA-Z]', keyword):
+        return False
+
+    # Skip if it's just numbers or symbols
+    if re.match(r'^[\d\s\-\+\.]+$', keyword):
+        return False
+
+    return True
+
+
+def _extract_technical_skills(text: str) -> Set[str]:
+    """Extract likely technical skills/tools from text."""
+    # Common technical patterns
+    patterns = [
+        r'\b(?:Python|Java|JavaScript|TypeScript|C\+\+|C#|Ruby|Go|Rust|Swift|Kotlin|PHP|Scala)\b',
+        r'\b(?:React|Angular|Vue|Node\.js|Express|Django|Flask|Spring|Rails|Laravel)\b',
+        r'\b(?:AWS|Azure|GCP|Docker|Kubernetes|Jenkins|CircleCI|Git|Linux|Unix)\b',
+        r'\b(?:SQL|NoSQL|PostgreSQL|MySQL|MongoDB|Redis|Elasticsearch|DynamoDB)\b',
+        r'\b(?:REST|GraphQL|API|CI/CD|DevOps|Agile|Scrum|TDD|Microservices)\b',
+        r'\b(?:Machine Learning|ML|AI|Data Science|Analytics|TensorFlow|PyTorch)\b',
+        r'\b(?:HTML|CSS|SASS|Webpack|Babel|npm|yarn|TypeScript|ES6)\b',
+    ]
+
+    skills = set()
+    for pattern in patterns:
+        matches = re.finditer(pattern, text, re.IGNORECASE)
+        for match in matches:
+            skills.add(match.group(0))
+
+    return skills
 
 
 def generate_actionable_steps(breakdown, job_text: str, resume_text: str, linkedin_text: str = "") -> List[Dict]:
@@ -18,75 +74,119 @@ def generate_actionable_steps(breakdown, job_text: str, resume_text: str, linked
     """
     steps = []
 
-    # 1. CRITICAL: Missing Required Keywords
-    if breakdown.skills_coverage < 70 and breakdown.missing_keywords:
-        missing_critical = breakdown.missing_keywords[:8]
-        specific_actions = []
+    # Filter missing keywords to only meaningful ones
+    meaningful_missing = [kw for kw in breakdown.missing_keywords if _is_meaningful_keyword(kw)]
 
-        for keyword in missing_critical:
-            # Try to find context in job description
-            sentences = re.split(r'[.!?]+', job_text)
-            context = ""
-            for sent in sentences:
-                if keyword.lower() in sent.lower():
-                    context = sent.strip()[:120]
-                    break
+    # Extract technical skills specifically
+    jd_tech_skills = _extract_technical_skills(job_text)
+    cv_tech_skills = _extract_technical_skills(resume_text)
+    missing_tech_skills = list(jd_tech_skills - cv_tech_skills)[:8]
 
-            if context:
+    # 1. CRITICAL: Missing Technical Skills/Keywords
+    if breakdown.skills_coverage < 70 and (missing_tech_skills or meaningful_missing):
+        # Prioritize technical skills, then other meaningful keywords
+        critical_keywords = missing_tech_skills[:5] + meaningful_missing[:3]
+        critical_keywords = critical_keywords[:8]  # Max 8
+
+        if critical_keywords:
+            specific_actions = []
+
+            # Group by how to add them
+            technical_group = [kw for kw in critical_keywords if kw in missing_tech_skills]
+            other_group = [kw for kw in critical_keywords if kw not in missing_tech_skills]
+
+            if technical_group:
                 specific_actions.append(
-                    f'• "{keyword}" - Job says: "{context}..."\n'
-                    f'  → Add to Skills section AND mention in a relevant bullet point'
+                    "**Technical Skills to Add:**\n"
                 )
-            else:
+                for skill in technical_group:
+                    specific_actions.append(
+                        f'• {skill}\n'
+                        f'  → Add to "Skills" or "Technical Skills" section\n'
+                        f'  → Mention in at least one bullet under Experience where you used it'
+                    )
+
+            if other_group:
                 specific_actions.append(
-                    f'• "{keyword}"\n'
-                    f'  → Add to Skills section and describe where/how you used it'
+                    "\n**Keywords/Concepts to Include:**\n"
                 )
+                for keyword in other_group:
+                    # Find meaningful context
+                    sentences = [s.strip() for s in re.split(r'[.!?]+', job_text) if keyword.lower() in s.lower()]
+                    context = sentences[0][:100] + "..." if sentences else ""
 
-        steps.append({
-            "priority": "🔴 CRITICAL",
-            "category": "Missing Required Keywords",
-            "action": f"Add these {len(missing_critical)} critical keywords from the job description",
-            "details": specific_actions,
-            "impact": f"Could increase Skills Coverage from {breakdown.skills_coverage:.0f}% to ~{min(90, breakdown.skills_coverage + 25):.0f}%"
-        })
+                    if context and len(context) > 20:
+                        specific_actions.append(
+                            f'• "{keyword}"\n'
+                            f'  Job context: {context}\n'
+                            f'  → Weave this into your experience bullets where relevant'
+                        )
+                    else:
+                        specific_actions.append(
+                            f'• "{keyword}"\n'
+                            f'  → Add to Skills section and/or mention in experience'
+                        )
 
-    # 2. HIGH PRIORITY: Keyword Match Improvement
+            steps.append({
+                "priority": "🔴 CRITICAL",
+                "category": "Missing Required Skills/Keywords",
+                "action": f"Add these {len(critical_keywords)} important keywords from the job posting",
+                "details": specific_actions,
+                "impact": f"Could increase Skills Coverage from {breakdown.skills_coverage:.0f}% to ~{min(90, breakdown.skills_coverage + 25):.0f}%"
+            })
+
+    # 2. HIGH PRIORITY: Use Job Description's Exact Language
     if breakdown.keyword_similarity < 70:
-        # Extract key phrases from job description
         jd_lower = job_text.lower()
         cv_lower = resume_text.lower()
 
-        # Find important phrases (2-3 words) that appear multiple times in JD
-        phrases = re.findall(r'\b(?:\w+\s+){1,2}\w+\b', jd_lower)
-        phrase_counts = {}
-        for phrase in phrases:
-            phrase = phrase.strip()
-            if len(phrase) > 10 and phrase not in phrase_counts:
-                phrase_counts[phrase] = jd_lower.count(phrase)
+        # Extract requirement phrases (looking for "experience with", "knowledge of", etc.)
+        requirement_patterns = [
+            r'(?:experience (?:with|in|using|developing)|proficiency (?:in|with)|knowledge of|familiar with|expertise in|skilled (?:in|with)|background in)\s+([^.!?,\n]{10,60})',
+            r'(?:must have|should have|required|requirements?:|qualifications?:)\s*([^.!?\n]{15,80})',
+            r'(?:responsible for|duties include|you will)\s+([^.!?\n]{15,80})',
+        ]
 
-        # Get top phrases not in resume
-        important_phrases = sorted(phrase_counts.items(), key=lambda x: x[1], reverse=True)
-        missing_phrases = [p for p, count in important_phrases if count >= 2 and p not in cv_lower][:5]
+        important_phrases = []
+        for pattern in requirement_patterns:
+            matches = re.finditer(pattern, job_text, re.IGNORECASE)
+            for match in matches:
+                phrase = match.group(1).strip()
+                # Clean up the phrase
+                phrase = re.sub(r'\s+', ' ', phrase)
+                if len(phrase) > 15 and phrase.lower() not in cv_lower:
+                    important_phrases.append(phrase)
 
-        if missing_phrases:
-            phrase_actions = [
-                "Replace generic descriptions with these exact phrases from the job posting:\n"
-            ]
+        if important_phrases:
+            # Deduplicate similar phrases
+            unique_phrases = []
+            for phrase in important_phrases[:10]:
+                # Check if not too similar to existing
+                is_unique = all(phrase.lower() not in existing.lower() and
+                              existing.lower() not in phrase.lower()
+                              for existing in unique_phrases)
+                if is_unique:
+                    unique_phrases.append(phrase)
 
-            for phrase in missing_phrases:
-                phrase_actions.append(
-                    f'• "{phrase}"\n'
-                    f'  → Use this EXACT wording in 2-3 different bullet points'
-                )
+            if unique_phrases[:5]:
+                phrase_actions = [
+                    "The job description emphasizes these specific requirements:\n"
+                ]
 
-            steps.append({
-                "priority": "🟠 HIGH",
-                "category": "Mirror Job Description Language",
-                "action": "Use the employer's exact terminology and phrases",
-                "details": phrase_actions,
-                "impact": f"Could increase Keyword Match from {breakdown.keyword_similarity:.0f}% to ~{min(90, breakdown.keyword_similarity + 20):.0f}%"
-            })
+                for idx, phrase in enumerate(unique_phrases[:5], 1):
+                    phrase_actions.append(
+                        f'{idx}. "{phrase}"\n'
+                        f'   → Mirror this language in your resume bullets\n'
+                        f'   → Use their exact phrasing where you have relevant experience\n'
+                    )
+
+                steps.append({
+                    "priority": "🟠 HIGH",
+                    "category": "Mirror Job Requirements",
+                    "action": "Rewrite bullets to match the job's specific language",
+                    "details": phrase_actions,
+                    "impact": f"Could increase Keyword Match from {breakdown.keyword_similarity:.0f}% to ~{min(90, breakdown.keyword_similarity + 20):.0f}%"
+                })
 
     # 3. HIGH PRIORITY: LinkedIn Profile Content
     if linkedin_text and len(linkedin_text) > 100:
