@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import UploadForm from './components/UploadForm'
 import Results from './components/Results'
 import ConsentBanner from './components/ConsentBanner'
@@ -6,11 +6,18 @@ import ConsentBanner from './components/ConsentBanner'
 function App() {
   const [results, setResults] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [hasConsent, setHasConsent] = useState(false)
+  const [hasConsent, setHasConsent] = useState(() => {
+    return localStorage.getItem('gdpr_consent_accepted') === 'true'
+  })
+
+  const handleAcceptConsent = () => {
+    localStorage.setItem('gdpr_consent_accepted', 'true')
+    setHasConsent(true)
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {!hasConsent && <ConsentBanner onAccept={() => setHasConsent(true)} />}
+      {!hasConsent && <ConsentBanner onAccept={handleAcceptConsent} />}
 
       <div className="container mx-auto px-4 py-8">
         <header className="text-center mb-12">
@@ -38,6 +45,24 @@ function App() {
 
           {results && !loading && <Results data={results} />}
         </div>
+
+        <footer className="mt-16 text-center text-gray-600 text-sm">
+          <div className="flex justify-center items-center gap-6">
+            <a
+              href="http://localhost:8000/api/privacy-notice"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-indigo-600 underline"
+            >
+              Privacy Notice
+            </a>
+            <span>•</span>
+            <span className="flex items-center gap-2">
+              <span className="text-green-600">✓</span>
+              GDPR Compliant
+            </span>
+          </div>
+        </footer>
       </div>
     </div>
   )
