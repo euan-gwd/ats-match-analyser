@@ -1,6 +1,6 @@
 # ATS Match Analyser
 
-AI-powered CV optimization tool that analyzes resumes against job descriptions using **enterprise-grade ATS matching** technology.
+AI-powered CV optimization tool that analyzes resumes against job descriptions using **enterprise-grade ATS matching** technology. Personal project exploring Python and NLP concepts
 
 ## 🎯 Key Features
 
