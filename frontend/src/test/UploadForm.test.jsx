@@ -2,10 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import UploadForm from '../components/UploadForm'
-import axios from 'axios'
 
-// Mock axios
-vi.mock('axios')
+// Mock fetch
+global.fetch = vi.fn()
 
 describe('UploadForm', () => {
   const mockOnResults = vi.fn()
@@ -61,16 +60,20 @@ describe('UploadForm', () => {
   })
 
   it('submits form with valid data', async () => {
-    axios.post.mockResolvedValueOnce({ data: {} }) // consent
-    axios.post.mockResolvedValueOnce({
-      data: {
+
+    // Mock consent fetch
+    fetch.mockResolvedValueOnce({ ok: true, json: async () => ({}) })
+    // Mock analyze fetch
+    fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
         overall: 75.5,
         keyword_similarity: 68.0,
         skills_coverage: 82.0,
         matched_keywords: ['python', 'react'],
         missing_keywords: ['kubernetes']
-      }
-    }) // analyze
+      })
+    })
 
     const { container } = render(<UploadForm onResults={mockOnResults} onLoading={mockOnLoading} />)
 
@@ -89,7 +92,7 @@ describe('UploadForm', () => {
 
     await waitFor(() => {
       expect(mockOnLoading).toHaveBeenCalledWith(true)
-      expect(axios.post).toHaveBeenCalledTimes(2)
+      expect(fetch).toHaveBeenCalledTimes(2)
       expect(mockOnResults).toHaveBeenCalledWith(
         expect.objectContaining({
           overall: 75.5,

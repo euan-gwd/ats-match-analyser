@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import axios from 'axios'
+
 
 const API_URL = 'http://localhost:8000'
 
@@ -35,10 +35,15 @@ export default function UploadForm({ onResults, onLoading, disabled }) {
     try {
       const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 
+
       // Record consent
-      await axios.post(`${API_URL}/api/consent`,
-        new URLSearchParams({ session_id: sessionId })
-      )
+      await fetch(`${API_URL}/api/consent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({ session_id: sessionId })
+      })
 
       // Prepare form data
       const formData = new FormData()
@@ -56,15 +61,18 @@ export default function UploadForm({ onResults, onLoading, disabled }) {
       }
 
       // Submit analysis
-      const response = await axios.post(`${API_URL}/api/analyze`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
+      const response = await fetch(`${API_URL}/api/analyze`, {
+        method: 'POST',
+        body: formData,
       })
-
-      onResults(response.data)
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw { response: { data: errorData } }
+      }
+      const data = await response.json()
+      onResults(data)
     } catch (err) {
-      setError(err.response?.data?.detail || 'Analysis failed. Please try again.')
+      setError(err?.response?.data?.detail || 'Analysis failed. Please try again.')
     } finally {
       onLoading(false)
     }

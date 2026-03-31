@@ -2,12 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import App from '../App'
 
-// Mock axios
-vi.mock('axios', () => ({
-  default: {
-    post: vi.fn()
-  }
-}))
+
 
 describe('App Integration Tests', () => {
   beforeEach(() => {
